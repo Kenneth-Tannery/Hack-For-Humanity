@@ -48,21 +48,25 @@ export const RISK_QUESTIONS = [
     id: 'adhd',
     kicker: 'Helps us set expectations',
     title: 'Have you been diagnosed with ADHD or a learning difference?',
+    allowUnsure: true,
   },
   {
     id: 'anxiety',
     kicker: 'Helps us set expectations',
     title: 'Have you had anxiety or depression that needed treatment?',
+    allowUnsure: true,
   },
   {
     id: 'loc',
     kicker: 'About this injury',
     title: 'Did you lose consciousness?',
+    allowUnsure: true,
   },
   {
     id: 'amnesia',
     kicker: 'About this injury',
     title: 'Any gap in memory around the injury?',
+    allowUnsure: true,
   },
   {
     id: 'repeat',
@@ -78,6 +82,7 @@ export const RISK_QUESTIONS = [
     id: 'worse',
     kicker: 'About this injury',
     title: 'Are symptoms worse than last time, if you’ve had one before?',
+    allowSkip: true,
   },
 ]
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { SCALE_6_LABELS, usePrefersReducedMotion, useThrottledValue, zoneStatus } from './a11y.js'
 import {
   dayNumber,
   formatTime,
@@ -10,6 +11,7 @@ import {
   targetZone,
 } from './data.js'
 import {
+  Back,
   Card,
   Clock,
   Danger,
@@ -27,6 +29,7 @@ import {
 } from './ui.jsx'
 
 function Wave() {
+  const reduce = usePrefersReducedMotion()
   return (
     <div className="wave" aria-hidden="true">
       <svg viewBox="0 0 320 160" preserveAspectRatio="none">
@@ -36,16 +39,18 @@ function Wave() {
           strokeWidth="2.5"
           points="0,90 18,90 28,90 36,40 44,120 52,70 60,90 88,90 98,90 108,20 118,140 128,90 180,90 190,90 198,50 206,110 214,80 222,90 260,90 270,90 278,35 286,125 294,75 302,90 320,90"
         >
-          <animate
-            attributeName="points"
-            dur="1.2s"
-            repeatCount="indefinite"
-            values="
+          {reduce ? null : (
+            <animate
+              attributeName="points"
+              dur="1.2s"
+              repeatCount="indefinite"
+              values="
               0,90 18,90 28,90 36,40 44,120 52,70 60,90 88,90 98,90 108,20 118,140 128,90 180,90 190,90 198,50 206,110 214,80 222,90 260,90 270,90 278,35 286,125 294,75 302,90 320,90;
               0,90 18,90 28,90 36,70 44,90 52,40 60,90 88,90 98,90 108,90 118,25 128,130 180,90 190,90 198,90 206,45 214,120 222,90 260,90 270,90 278,90 286,30 294,130 302,90 320,90;
               0,90 18,90 28,90 36,40 44,120 52,70 60,90 88,90 98,90 108,20 118,140 128,90 180,90 190,90 198,50 206,110 214,80 222,90 260,90 270,90 278,35 286,125 294,75 302,90 320,90
             "
-          />
+            />
+          )}
         </polyline>
       </svg>
     </div>
@@ -55,12 +60,20 @@ function Wave() {
 export function Splash({ go, theme, setTheme }) {
   return (
     <Screen>
-      <button type="button" className="screen-body splash" onClick={() => go('disclaimer')}>
+      <button
+        type="button"
+        className="screen-body splash"
+        onClick={() => go('disclaimer')}
+        aria-label="Threshold. Paced recovery after concussion. Continue."
+      >
         <div className="brand">Threshold</div>
         <p className="tag">Paced recovery after concussion.</p>
       </button>
       <div className="screen-foot">
-        <Ghost onClick={() => setTheme(theme === 'dark' ? 'paper' : 'dark')}>
+        <Ghost
+          onClick={() => setTheme(theme === 'dark' ? 'paper' : 'dark')}
+          aria-pressed={theme === 'paper'}
+        >
           {theme === 'dark' ? 'Use paper theme' : 'Use dark theme'}
         </Ghost>
         <Disclaimer />
@@ -72,8 +85,8 @@ export function Splash({ go, theme, setTheme }) {
 export function DisclaimerScreen({ go }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="1 of 4" />
-      <div className="screen-body">
+      <Status left={<Clock />} right="1 of 4" onBack={() => go('splash')} />
+      <div className="screen-body intro">
         <Kicker tone="in">Before we start</Kicker>
         <Title>Read this first.</Title>
         <Lead>Thirty seconds. It matters more than anything else in the app.</Lead>
@@ -97,7 +110,7 @@ export function Injury({ go, injuryDate, setInjuryDate, age, setAge }) {
   const under18 = Number(age) > 0 && Number(age) < 18
   return (
     <Screen>
-      <Status left={<Clock />} right="2 of 4" />
+      <Status left={<Clock />} right="2 of 4" onBack={() => go('disclaimer')} />
       <div className="screen-body">
         <Kicker>Your injury</Kicker>
         <Title>When did it happen?</Title>
@@ -129,9 +142,34 @@ export function Injury({ go, injuryDate, setInjuryDate, age, setAge }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => go('risk')} disabled={!injuryDate || !age}>
+        <Primary onClick={() => go('risk-consent')} disabled={!injuryDate || !age}>
           Continue
         </Primary>
+      </Foot>
+    </Screen>
+  )
+}
+
+export function RiskConsent({ go }) {
+  return (
+    <Screen>
+      <Status left={<Clock />} right="3 of 4" onBack={() => go('injury')} />
+      <div className="screen-body intro">
+        <Kicker>Optional</Kicker>
+        <Title wide>Nine short questions about you.</Title>
+        <Lead>They help us set expectations. They are not a diagnosis, and you can skip the whole set.</Lead>
+        <div className="stack">
+          <InfoCard label="What we ask" tone="in">
+            Prior concussion, migraines, ADHD or mood history, and a few things about this injury.
+          </InfoCard>
+          <InfoCard label="If you skip" tone="above">
+            You can still use every session. We will treat recovery as typical unless you tell us otherwise.
+          </InfoCard>
+        </div>
+      </div>
+      <Foot>
+        <Primary onClick={() => go('risk')}>I’ll answer</Primary>
+        <Ghost onClick={() => go('outlook')}>Skip these questions</Ghost>
       </Foot>
     </Screen>
   )
@@ -146,37 +184,63 @@ export function Risk({ go, riskIndex, setRiskIndex, answers, setAnswers }) {
     if (riskIndex < total - 1) setRiskIndex(riskIndex + 1)
     else go('outlook')
   }
+  function back() {
+    if (riskIndex === 0) go('risk-consent')
+    else setRiskIndex(riskIndex - 1)
+  }
+  const lead = q.allowSkip
+    ? 'If this is your first concussion, skip this one.'
+    : q.allowUnsure
+      ? 'If you do not know, say so. Guessing does not help.'
+      : 'Yes or no is enough.'
   return (
     <Screen>
       <div className="progress-row">
-        <div className="bar" style={{ maxWidth: 120 }}>
+        <div
+          className="bar"
+          style={{ maxWidth: 120 }}
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={total}
+          aria-valuenow={riskIndex + 1}
+          aria-label={`Question ${riskIndex + 1} of ${total}`}
+        >
           <span style={{ width: `${((riskIndex + 1) / total) * 100}%` }} />
         </div>
         <span>
           Question {riskIndex + 1} of {total}
         </span>
+        <Back onClick={back} />
       </div>
       <div className="screen-body">
         <Kicker>{q.kicker}</Kicker>
         <Title wide>{q.title}</Title>
-        <Lead>Optional. You can skip these and still use everything.</Lead>
+        <Lead>{lead}</Lead>
         <div className="stack">
           <Primary onClick={() => answer('yes')}>Yes</Primary>
           <Primary onClick={() => answer('no')}>No</Primary>
+          {q.allowUnsure ? (
+            <Ghost onClick={() => answer('unsure')}>I’m not sure</Ghost>
+          ) : null}
+          {q.allowSkip ? (
+            <Ghost onClick={() => answer('skip')}>Skip this question</Ghost>
+          ) : null}
         </div>
       </div>
-      <Foot>
-        <Ghost onClick={() => go('outlook')}>Skip these questions</Ghost>
-      </Foot>
+      <Foot />
     </Screen>
   )
 }
 
-export function Outlook({ go, answers }) {
+export function Outlook({ go, answers, onStart, onBack }) {
   const longer = answers.prior === 'yes' || answers.repeat === 'yes' || answers.migraine === 'yes'
   return (
     <Screen>
-      <Status left={<Clock />} right="4 of 4" />
+      <Status
+        left={<Clock />}
+        right="4 of 4"
+        onBack={onBack || (() => go(Object.keys(answers).length ? 'risk' : 'risk-consent'))}
+      />
       <div className="screen-body">
         <Kicker>Your outlook</Kicker>
         <Title wide>{longer ? 'Recovery may take a little longer for you' : 'Most people improve within two weeks'}</Title>
@@ -195,7 +259,7 @@ export function Outlook({ go, answers }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => go('home')}>Start</Primary>
+        <Primary onClick={() => (onStart ? onStart() : go('home'))}>Start</Primary>
       </Foot>
     </Screen>
   )
@@ -221,7 +285,13 @@ export function Home({ go, injuryDate, age, overall, logged, level }) {
               Target {zone.low}–{zone.high} bpm
             </div>
           </Card>
-          <button type="button" className="card" onClick={() => go('checkin')} style={{ textAlign: 'left' }}>
+          <button
+            type="button"
+            className="card"
+            onClick={() => go('checkin')}
+            style={{ textAlign: 'left' }}
+            aria-label={logged ? `Symptoms today, logged ${overall} out of 10. Open check-in.` : 'Symptoms today, not logged yet. Open check-in.'}
+          >
             <div className="card-label">Symptoms today</div>
             <div className="card-value">{logged ? `Logged · ${overall} / 10` : 'Not logged yet'}</div>
           </button>
@@ -234,38 +304,54 @@ export function Home({ go, injuryDate, age, overall, logged, level }) {
   )
 }
 
-export function RedFlags({ go, flags, setFlags, overall }) {
+export function RedFlags({ go, flags, setFlags, overall, onGate }) {
   function toggle(item) {
     setFlags(flags.includes(item) ? flags.filter((f) => f !== item) : [...flags, item])
   }
-  function none() {
+  async function none() {
+    if (onGate) {
+      go(await onGate([]))
+      return
+    }
     if (overall >= 8) go('not-today')
     else go('preflight')
   }
+  async function flagged() {
+    if (onGate) {
+      go(await onGate(flags, 'emergency'))
+      return
+    }
+    go('emergency')
+  }
   return (
     <Screen>
-      <Status left={<Clock />} right="Step 1 of 3" />
+      <Status left={<Clock />} right="Step 1 of 3" onBack={() => go('home')} />
       <div className="screen-body">
         <Kicker>Before you start</Kicker>
         <Title>Any of these right now?</Title>
         <Lead>Tap any that apply.</Lead>
         <div className="check-list">
-          {RED_FLAGS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              className={`check-row${flags.includes(item) ? ' on' : ''}`}
-              onClick={() => toggle(item)}
-            >
-              <span className="box" />
-              {item}
-            </button>
-          ))}
+          {RED_FLAGS.map((item) => {
+            const on = flags.includes(item)
+            return (
+              <button
+                key={item}
+                type="button"
+                className={`check-row${on ? ' on' : ''}`}
+                onClick={() => toggle(item)}
+                aria-pressed={on}
+                aria-label={`${item}, ${on ? 'checked' : 'not checked'}`}
+              >
+                <span className="box" aria-hidden="true" />
+                {item}
+              </button>
+            )
+          })}
         </div>
       </div>
       <Foot>
         <Primary onClick={none}>None of these</Primary>
-        <Danger onClick={() => go('emergency')}>One or more apply</Danger>
+        <Danger onClick={flagged}>One or more apply</Danger>
       </Foot>
     </Screen>
   )
@@ -273,7 +359,7 @@ export function RedFlags({ go, flags, setFlags, overall }) {
 
 export function Emergency() {
   return (
-    <Screen variant="emergency">
+    <Screen variant="emergency" alert>
       <Status left={<Clock />} right="" />
       <div className="screen-body">
         <Kicker>Stop — do not exercise</Kicker>
@@ -300,7 +386,7 @@ export function Emergency() {
 export function NotToday({ go, overall }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="" />
+      <Status left={<Clock />} onBack={() => go('home')} />
       <div className="screen-body">
         <Kicker tone="above">Not today</Kicker>
         <Title>Let’s skip the session</Title>
@@ -318,16 +404,15 @@ export function NotToday({ go, overall }) {
       </div>
       <Foot>
         <Primary onClick={() => go('checkin')}>Log symptoms instead</Primary>
-        <Ghost onClick={() => go('home')}>Back to today</Ghost>
       </Foot>
     </Screen>
   )
 }
 
-export function Checkin({ go, overall, streak }) {
+export function Checkin({ go, overall, streak, logged }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="" />
+      <Status left={<Clock />} onBack={() => go('home')} />
       <div className="screen-body">
         <Kicker>Daily check-in</Kicker>
         <Title>How are you today?</Title>
@@ -335,14 +420,17 @@ export function Checkin({ go, overall, streak }) {
         <div className="stack">
           <Card>
             <div className="card-label">Last logged</div>
-            <div className="card-value">Yesterday · {overall} / 10</div>
-            <div className="card-sub">You’ve logged {streak} days in a row.</div>
+            <div className="card-value">
+              {logged ? `Today · ${overall} / 10` : streak ? `Last · ${overall} / 10` : 'Not yet'}
+            </div>
+            <div className="card-sub">
+              {streak ? `You’ve logged ${streak} day${streak === 1 ? '' : 's'} in a row.` : 'Start a streak today.'}
+            </div>
           </Card>
         </div>
       </div>
       <Foot>
         <Primary onClick={() => go('symptom')}>Start check-in</Primary>
-        <Secondary onClick={() => go('home')}>Later</Secondary>
       </Foot>
     </Screen>
   )
@@ -360,22 +448,42 @@ export function Symptom({ go, index, scores, setScores, setIndex }) {
   return (
     <Screen>
       <div className="progress-row">
-        <div className="bar">
+        <div
+          className="bar"
+          role="progressbar"
+          aria-valuemin={1}
+          aria-valuemax={SYMPTOMS.length}
+          aria-valuenow={index + 1}
+          aria-label={`Symptom ${index + 1} of ${SYMPTOMS.length}`}
+        >
           <span style={{ width: `${((index + 1) / SYMPTOMS.length) * 100}%` }} />
         </div>
         <span>
           {index + 1} of {SYMPTOMS.length}
         </span>
+        <Back
+          onClick={() => {
+            if (index === 0) go('checkin')
+            else setIndex(index - 1)
+          }}
+        />
       </div>
       <div className="screen-body">
         <Kicker>How bad, right now?</Kicker>
         <Title wide>{item}</Title>
         <Lead>0 is none. 6 is severe.</Lead>
-        <div className="scale-grid">
+        <div
+          className="scale-grid"
+          role="radiogroup"
+          aria-label={`${item}. Scale from 0 none to 6 severe.`}
+        >
           {[0, 1, 2, 3, 4, 5, 6].map((n) => (
             <button
               key={n}
               type="button"
+              role="radio"
+              aria-checked={scores[index] === n}
+              aria-label={`${n} of 6, ${SCALE_6_LABELS[n]}`}
               className={`scale-cell${scores[index] === n ? ' on' : ''}`}
               onClick={() => pick(n)}
             >
@@ -384,33 +492,31 @@ export function Symptom({ go, index, scores, setScores, setIndex }) {
           ))}
         </div>
       </div>
-      <Foot>
-        <Secondary
-          onClick={() => {
-            if (index === 0) go('checkin')
-            else setIndex(index - 1)
-          }}
-        >
-          Back
-        </Secondary>
-      </Foot>
+      <Foot />
     </Screen>
   )
 }
 
-export function Overall({ go, overall, setOverall, setLogged, setBefore }) {
+export function Overall({ go, overall, setOverall, setLogged, setBefore, onSave }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="Last question" />
+      <Status left={<Clock />} right="Last question" onBack={() => go('symptom')} />
       <div className="screen-body">
         <Kicker>Overall</Kicker>
         <Title>How bad is it right now?</Title>
         <Lead>0 is completely fine. 10 is the worst it has been.</Lead>
-        <div className="choice-stack">
+        <div
+          className="choice-stack"
+          role="radiogroup"
+          aria-label="Overall symptoms. Scale from 0 completely fine to 10 the worst it has been."
+        >
           {OVERALL_CHOICES.map((n) => (
             <button
               key={n}
               type="button"
+              role="radio"
+              aria-checked={overall === n}
+              aria-label={`${n} of 10, ${OVERALL_LABELS[n]}`}
               className={`choice${overall === n ? ' on' : ''}`}
               onClick={() => setOverall(n)}
             >
@@ -422,6 +528,10 @@ export function Overall({ go, overall, setOverall, setLogged, setBefore }) {
       <Foot>
         <Primary
           onClick={() => {
+            if (onSave) {
+              onSave()
+              return
+            }
             setLogged(true)
             setBefore(overall)
             go('home')
@@ -441,7 +551,7 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
     source === 'polar' ? 'Polar H10 · connected' : source === 'camera' ? 'Camera · ready' : source === 'manual' ? 'Manual count' : 'Not connected'
   return (
     <Screen>
-      <Status left={<Clock />} right={`Day ${day} · Level ${level}`} />
+      <Status left={<Clock />} right={`Day ${day} · Level ${level}`} onBack={() => go('red-flags')} />
       <div className="screen-body">
         <Kicker>Before you start</Kicker>
         <Title>How do you feel right now?</Title>
@@ -475,13 +585,18 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
 export function ConnectBle({ go, setSource, selected, setSelected }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="Searching…" />
+      <Status left={<Clock />} right="Searching…" onBack={() => go('preflight')} />
       <div className="screen-body">
         <Kicker>Heart rate</Kicker>
         <Title>Connect your strap</Title>
         <Lead>Chest straps are the most accurate option. Wet the contacts before you put it on.</Lead>
         <div className="stack">
-          <button type="button" className={`device${selected === 'polar' ? ' on' : ''}`} onClick={() => setSelected('polar')}>
+          <button
+            type="button"
+            className={`device${selected === 'polar' ? ' on' : ''}`}
+            onClick={() => setSelected('polar')}
+            aria-pressed={selected === 'polar'}
+          >
             <strong>Polar H10</strong>
             <small>Battery 62%</small>
           </button>
@@ -489,6 +604,7 @@ export function ConnectBle({ go, setSource, selected, setSelected }) {
             type="button"
             className={`device${selected === 'garmin' ? ' on' : ''}`}
             onClick={() => setSelected('garmin')}
+            aria-pressed={selected === 'garmin'}
           >
             <strong>Garmin HRM-Dual</strong>
             <small>Last used 3 days ago</small>
@@ -498,7 +614,7 @@ export function ConnectBle({ go, setSource, selected, setSelected }) {
       <Foot>
         <Primary
           onClick={() => {
-            setSource('polar')
+            setSource(selected === 'garmin' ? 'garmin' : 'polar')
             go('preflight')
           }}
         >
@@ -513,11 +629,14 @@ export function ConnectBle({ go, setSource, selected, setSelected }) {
 export function ConnectCamera({ go, setSource }) {
   return (
     <Screen>
-      <Status left={<Clock />} right="Camera" />
+      <Status left={<Clock />} right="Camera" onBack={() => go('connect-ble')} />
       <div className="screen-body">
         <Kicker>Heart rate</Kicker>
         <Title wide>Cover the camera with your fingertip</Title>
         <Lead>Rest your index finger flat over the lens and the flash. Keep still.</Lead>
+        <p className="sr-only" aria-live="polite" aria-atomic="true">
+          Reading your pulse. Signal quality: good. Camera readings are estimates. A chest strap is more accurate.
+        </p>
         <div className="stack stack-fill">
           <Wave />
           <Card>
@@ -555,14 +674,21 @@ export function ConnectManual({ go, setSource }) {
   }, [running])
   return (
     <Screen>
-      <Status left={<Clock />} right="Manual" />
+      <Status left={<Clock />} right="Manual" onBack={() => go('connect-camera')} />
       <div className="screen-body">
         <Kicker>Heart rate</Kicker>
         <Title>Count your pulse</Title>
         <Lead>Two fingers on your wrist or neck. Tap the button each time you feel a beat.</Lead>
-        <div className="countdown">{left}</div>
+        <div className="countdown" aria-live="off">
+          {left}
+        </div>
         <div className="kicker">Seconds left</div>
-        <button type="button" className="tap-pad" onClick={() => running && setBeats((b) => b + 1)}>
+        <button
+          type="button"
+          className="tap-pad"
+          onClick={() => running && setBeats((b) => b + 1)}
+          aria-label={`Tap on each beat. ${beats} beats counted. ${left} seconds left.`}
+        >
           Tap on each beat · {beats}
         </button>
       </div>
@@ -591,8 +717,13 @@ function useSessionClock(active, startSeconds) {
 }
 
 function useBpm(base) {
+  const reduce = usePrefersReducedMotion()
   const [bpm, setBpm] = useState(base)
   useEffect(() => {
+    if (reduce) {
+      setBpm(base)
+      return undefined
+    }
     const id = setInterval(() => {
       setBpm((n) => {
         const drift = Math.round((Math.random() - 0.5) * 4)
@@ -600,23 +731,29 @@ function useBpm(base) {
       })
     }, 900)
     return () => clearInterval(id)
-  }, [base])
+  }, [base, reduce])
   return bpm
 }
 
 export function Warmup({ go }) {
   const [left] = useSessionClock(true, 175)
   const bpm = useBpm(96)
+  const announced = useThrottledValue(bpm)
   return (
-    <Screen>
+    <Screen calm>
       <div className="session-top">
         <span>Warmup</span>
         <span>{formatTime(left)} left</span>
       </div>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        Warmup. {announced} beats per minute. {formatTime(left)} left. Ease in gently.
+      </p>
       <div className="session-hero">
         <div className="cue">Ease in gently</div>
         <div className="bpm-row">
-          <div className="bpm live">{bpm}</div>
+          <div className="bpm live" aria-hidden="true">
+            {bpm}
+          </div>
           <div className="bpm-unit">BPM</div>
         </div>
         <p className="hint">Walk or pedal slowly. We’ll tell you when to settle into your target.</p>
@@ -633,15 +770,18 @@ export function Active({ go, age, source }) {
   const zone = targetZone(age)
   const [left] = useSessionClock(true, 702)
   const bpm = useBpm(133)
+  const announced = useThrottledValue(bpm)
+  const status = zoneStatus(bpm, zone)
   const min = zone.low - 30
   const max = zone.high + 30
   const pct = ((bpm - min) / (max - min)) * 100
-  const sourceLabel = source === 'polar' ? 'Chest strap — signal good' : source === 'camera' ? 'Camera — signal good' : 'Manual pacing'
+  const sourceLabel =
+    source === 'polar' ? 'Chest strap — signal good' : source === 'camera' ? 'Camera — signal good' : 'Manual pacing'
   useEffect(() => {
     if (left === 0) go('after')
   }, [left, go])
   return (
-    <Screen>
+    <Screen calm>
       <div className="session-top">
         <span>
           Steady state
@@ -651,13 +791,22 @@ export function Active({ go, age, source }) {
         </span>
         <span>{formatTime(left)} left</span>
       </div>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        {announced} beats per minute, {status}. Target {zone.low} to {zone.high}. {formatTime(left)} left. {sourceLabel}.
+      </p>
       <div className="session-hero">
         <div className="cue">Hold here</div>
         <div className="bpm-row">
-          <div className="bpm">{bpm}</div>
+          <div className="bpm" aria-hidden="true">
+            {bpm}
+          </div>
           <div className="bpm-unit">BPM</div>
         </div>
-        <div className="gauge">
+        <div
+          className="gauge"
+          role="img"
+          aria-label={`Heart rate ${bpm}, ${status}. Target ${zone.low} to ${zone.high}.`}
+        >
           <div className="gauge-track">
             <div className="g-below" />
             <div className="g-in" />
@@ -665,7 +814,9 @@ export function Active({ go, age, source }) {
             <div className="needle" style={{ left: `${Math.max(2, Math.min(98, pct))}%` }} />
           </div>
         </div>
-        <p className="sensor">{sourceLabel}</p>
+        <p className="sensor">
+          {sourceLabel}. {status}.
+        </p>
       </div>
       <Foot>
         <Secondary onClick={() => go('glance')}>Dim the screen</Secondary>
@@ -677,15 +828,28 @@ export function Active({ go, age, source }) {
 
 export function Glance({ go }) {
   const bpm = useBpm(133)
+  const announced = useThrottledValue(bpm)
   return (
-    <Screen variant="glance" onClick={() => go('active')}>
-      <div className="glance-bpm">{bpm}</div>
-      <p className="glance-hint">Tap anywhere to stop</p>
+    <Screen variant="glance" calm>
+      <p className="sr-only" aria-live="polite" aria-atomic="true">
+        Heart rate {announced} beats per minute.
+      </p>
+      <button
+        type="button"
+        className="glance-hit"
+        onClick={() => go('active')}
+        aria-label={`Heart rate ${bpm} beats per minute. Tap to return to the session.`}
+      >
+        <div className="glance-bpm" aria-hidden="true">
+          {bpm}
+        </div>
+        <p className="glance-hint">Tap anywhere to return</p>
+      </button>
     </Screen>
   )
 }
 
-export function After({ go, after, setAfter }) {
+export function After({ go, after, setAfter, onSave }) {
   return (
     <Screen>
       <Status left={<Clock />} right="After session" />
@@ -693,11 +857,18 @@ export function After({ go, after, setAfter }) {
         <Kicker>After</Kicker>
         <Title>How do you feel now?</Title>
         <Lead>We’ll ask once more in an hour. That settling is what the rule uses.</Lead>
-        <div className="choice-stack">
+        <div
+          className="choice-stack"
+          role="radiogroup"
+          aria-label="After session. Overall symptoms from 0 completely fine to 10 the worst it has been."
+        >
           {OVERALL_CHOICES.map((n) => (
             <button
               key={n}
               type="button"
+              role="radio"
+              aria-checked={after === n}
+              aria-label={`${n} of 10, ${OVERALL_LABELS[n]}`}
               className={`choice${after === n ? ' on' : ''}`}
               onClick={() => setAfter(n)}
             >
@@ -707,13 +878,13 @@ export function After({ go, after, setAfter }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => go('hour')}>Save</Primary>
+        <Primary onClick={() => (onSave ? onSave() : go('hour'))}>Save</Primary>
       </Foot>
     </Screen>
   )
 }
 
-export function HourLater({ go, hour, setHour }) {
+export function HourLater({ go, hour, setHour, onSave }) {
   return (
     <Screen>
       <Status left={<Clock />} right="Follow-up" />
@@ -721,11 +892,18 @@ export function HourLater({ go, hour, setHour }) {
         <Kicker>One hour later</Kicker>
         <Title wide>Have symptoms settled?</Title>
         <Lead>In a real day this waits an hour. For the prototype, log it now.</Lead>
-        <div className="choice-stack">
+        <div
+          className="choice-stack"
+          role="radiogroup"
+          aria-label="One hour later. Overall symptoms from 0 completely fine to 10 the worst it has been."
+        >
           {[3, 4, 5, 6, 7].map((n) => (
             <button
               key={n}
               type="button"
+              role="radio"
+              aria-checked={hour === n}
+              aria-label={`${n} of 10, ${OVERALL_LABELS[n] || `${n} out of 10`}`}
               className={`choice${hour === n ? ' on' : ''}`}
               onClick={() => setHour(n)}
             >
@@ -735,7 +913,7 @@ export function HourLater({ go, hour, setHour }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => go('held')}>See today’s rule</Primary>
+        <Primary onClick={() => (onSave ? onSave() : go('held'))}>See today’s rule</Primary>
       </Foot>
     </Screen>
   )
@@ -759,11 +937,11 @@ export function Held({ go, before, after, hour, setLevel, level }) {
             <strong>{before} / 10</strong>
           </div>
           <div className={`metric-row${rise > 2 ? ' hot' : ''}`}>
-            <span>After session</span>
+            <span>After session{rise > 2 ? ' — rose more than 2 points' : ''}</span>
             <strong>{after} / 10</strong>
           </div>
           <div className={`metric-row${hour - before > 2 ? ' hot' : ''}`}>
-            <span>One hour later</span>
+            <span>One hour later{hour - before > 2 ? ' — had not settled' : ''}</span>
             <strong>{hour} / 10</strong>
           </div>
           <div className="card">
