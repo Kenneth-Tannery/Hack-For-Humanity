@@ -1,8 +1,19 @@
-export function Status({ left, right }) {
+export function Back({ onClick }) {
+  return (
+    <button type="button" className="back-link" onClick={onClick} aria-label="Back">
+      &lt; Back
+    </button>
+  )
+}
+
+export function Status({ left, right, onBack }) {
   return (
     <div className="status">
-      <span>{left}</span>
-      <span>{right}</span>
+      <span>
+        {left}
+        {onBack && right ? ` · ${right}` : null}
+      </span>
+      {onBack ? <Back onClick={onBack} /> : <span>{right}</span>}
     </div>
   )
 }
@@ -49,9 +60,9 @@ export function Secondary({ children, onClick }) {
   )
 }
 
-export function Ghost({ children, onClick }) {
+export function Ghost({ children, onClick, ...rest }) {
   return (
-    <button type="button" className="btn btn-ghost" onClick={onClick}>
+    <button type="button" className="btn btn-ghost" onClick={onClick} {...rest}>
       {children}
     </button>
   )
@@ -78,9 +89,12 @@ export function Foot({ children }) {
   )
 }
 
-export function Screen({ children, variant, onClick }) {
+export function Screen({ children, variant, onClick, alert, calm }) {
+  const classes = ['screen']
+  if (variant) classes.push(`is-${variant}`)
+  if (calm) classes.push('is-calm')
   return (
-    <section className={`screen${variant ? ` is-${variant}` : ''}`} onClick={onClick}>
+    <section className={classes.join(' ')} onClick={onClick} role={alert ? 'alert' : undefined}>
       {children}
     </section>
   )
