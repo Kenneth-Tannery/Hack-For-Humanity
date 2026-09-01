@@ -14,6 +14,7 @@ import {
   WARMUP_SECONDS,
 } from './data.js'
 import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt } from './speech.js'
+import { modelSessionBpm } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
 import {
   Back,
@@ -735,7 +736,11 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
   const zone = targetZone(age, level)
   const day = dayNumber(injuryDate)
   const sourceLabel =
-    source === 'polar' ? 'Polar H10 · connected' : source === 'camera' ? 'Camera · ready' : source === 'manual' ? 'Manual count' : 'Not connected'
+    source === 'polar' || source === 'garmin'
+      ? 'Chest strap · demo signal'
+      : source === 'camera'
+        ? 'Camera · pulse locked at start'
+        : 'Not connected'
   return (
     <Screen>
       <Status left={<Clock />} right={`Day ${day} · Level ${level}`} onBack={() => go('red-flags')} />
@@ -762,6 +767,9 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
             <div className="card-sub">
               Level {level} · based on your age, not weight. Stop if symptoms worsen — that matters
               more than the number.
+              {source === 'camera'
+                ? ' Camera stays off during exercise; pace is tracked from your pulse checks.'
+                : ''}
             </div>
             <div className="card-cite">
               Concussion Alliance at-home stages; Amsterdam consensus 2023 return-to-sport HR steps.
@@ -822,42 +830,74 @@ export function ConnectBle({ go, setSource, selected, setSelected }) {
   )
 }
 
-export function ConnectCamera({ go, setSource, onCameraLocked }) {
-  const { bpm, quality, error, nodes, torch, lock } = useFingertipHr({
+function ConnectCameraInner({
+  go,
+  setSource,
+  onCameraLocked,
+  mode = 'connect',
+  goTarget,
+  onRetry,
+}) {
+  const target = goTarget ?? (mode === 'resync' ? 'active' : 'preflight')
+  const isResync = mode === 'resync'
+  const { bpm, quality, error, nodes, torch, lock, timedOut, stop } = useFingertipHr({
     enabled: true,
-    showGraph: true,
+    showGraph: !isResync,
     trackLock: true,
     preferTorch: true,
     torchMaxMs: 0,
-    startDelayMs: 700,
+    startDelayMs: 400,
   })
   const advanced = useRef(false)
   const displayBpm = lock.locked ? lock.lockedBpm ?? bpm : bpm
+  const progressPct = Math.round((lock.progress ?? 0) * 100)
+  const noTorch = !error && !lock.locked && torch.supported === false
 
   useEffect(() => {
-    if (advanced.current || error || !lock.locked) return undefined
+    if (lock.locked) stop()
+  }, [lock.locked, stop])
+
+  useEffect(() => {
+    if (timedOut) stop()
+  }, [timedOut, stop])
+
+  useEffect(() => {
+    if (advanced.current || error || timedOut || !lock.locked) return undefined
     const id = setTimeout(() => {
       if (advanced.current) return
       advanced.current = true
       const locked = lock.lockedBpm ?? bpm
       if (onCameraLocked) onCameraLocked(locked)
       else setSource('camera')
-      go('preflight')
+      go(target)
     }, 400)
     return () => clearTimeout(id)
-  }, [lock.locked, lock.lockedBpm, bpm, error, go, setSource, onCameraLocked])
+  }, [lock.locked, lock.lockedBpm, bpm, error, timedOut, go, setSource, onCameraLocked, target])
 
+  const title = isResync ? 'Quick pulse check' : 'Lock your pulse'
   const cue = lock.locked
     ? 'Got it — lift your finger'
-    : lock.phase === 'unstable'
-      ? 'Hold steadier'
-      : 'Cover camera + flash'
+    : timedOut
+      ? 'Couldn’t lock in time'
+      : noTorch
+        ? 'Flash not available here'
+        : lock.phase === 'unstable'
+          ? 'Hold steadier'
+          : 'Cover camera + flash'
 
   const hint = lock.locked
-    ? 'Continuing — camera off for the session so you can move hands-free.'
-    : lock.phase === 'measuring'
-      ? 'Almost there — keep still a moment longer.'
-      : 'We lock once here (~3 sec), then track your pace during the workout like a strap.'
+    ? isResync
+      ? 'Updating your pace — continuing to steady state.'
+      : 'Continuing — camera off for the session so you can move hands-free.'
+    : timedOut
+      ? 'Try again with firm contact on lens and flash, or use a chest strap.'
+      : noTorch
+        ? 'Use Android Chrome with the rear camera, or connect a chest strap instead.'
+        : lock.phase === 'measuring'
+          ? 'Almost there — keep still a moment longer.'
+          : isResync
+            ? 'Quick check before steady state (~3 sec). Camera off again after.'
+            : 'We lock once here (~2 sec), then track your pace during the workout like a strap.'
 
   const flashNote = torch.on
     ? 'Flash on · lift finger when it locks'
@@ -870,17 +910,19 @@ export function ConnectCamera({ go, setSource, onCameraLocked }) {
   return (
     <Screen calm>
       <div className="session-top">
-        <span>Lock your pulse</span>
+        <span>{title}</span>
         <span>
-          {lock.locked ? 'Locked' : error ? '—' : `${Math.round((lock.progress ?? 0) * 100)}%`}
+          {lock.locked ? 'Locked' : error || timedOut ? '—' : `${progressPct}%`}
         </span>
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         {error
           ? `Camera error. ${error}`
-          : lock.locked
-            ? `Pulse locked at ${displayBpm} beats per minute. Continuing.`
-            : `${displayBpm ? `${displayBpm} beats per minute.` : 'Waiting for pulse.'} ${hint} ${flashNote}.`}
+          : timedOut
+            ? 'Could not lock pulse in time. Try again or use a chest strap.'
+            : lock.locked
+              ? `Pulse locked at ${displayBpm} beats per minute. Continuing.`
+              : `${displayBpm ? `${displayBpm} beats per minute.` : 'Waiting for pulse.'} ${hint} ${flashNote}.`}
       </p>
       <div className="session-hero">
         <div className="cue">{cue}</div>
@@ -890,40 +932,48 @@ export function ConnectCamera({ go, setSource, onCameraLocked }) {
           </div>
           <div className="bpm-unit">BPM</div>
         </div>
-        {!lock.locked && !error ? (
+        {!lock.locked && !error && !timedOut ? (
           <div
             className="hr-lock-bar hr-lock-bar-hero"
             role="progressbar"
-            aria-valuenow={Math.round((lock.progress ?? 0) * 100)}
+            aria-valuenow={progressPct}
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label="Lock progress"
           >
-            <div
-              className="hr-lock-fill"
-              style={{ width: `${Math.round((lock.progress ?? 0) * 100)}%` }}
-            />
+            <div className="hr-lock-fill" style={{ width: `${progressPct}%` }} />
           </div>
         ) : null}
         <p className="hint">{error ? error : hint}</p>
-        {!lock.locked && !error ? (
+        {!lock.locked && !error && !timedOut ? (
           <div className="hr-stage hr-stage-compact" aria-hidden="true">
             {nodes}
           </div>
         ) : null}
-        {!error ? (
+        {!error && !timedOut ? (
           <p className="sensor" style={{ marginTop: 8 }}>
             {flashNote}. {quality.label}.
+            {lock.emergency ? ' Quick lock.' : lock.soft ? ' Stable lock.' : ''}
           </p>
         ) : null}
       </div>
       <Foot>
-        {error ? (
-          <Primary onClick={() => go('connect-manual')}>Count my pulse instead</Primary>
+        {error || timedOut ? (
+          <>
+            <Primary onClick={onRetry}>Try again</Primary>
+            <Ghost onClick={() => go('connect-ble')}>Use chest strap</Ghost>
+          </>
+        ) : isResync ? (
+          <>
+            <Ghost onClick={() => go('active')}>Skip — use last reading</Ghost>
+            <Ghost onClick={() => go('after')}>Stop session</Ghost>
+          </>
         ) : (
           <>
             <Ghost onClick={() => go('connect-ble')}>Back</Ghost>
-            <Ghost onClick={() => go('connect-manual')}>Count pulse instead</Ghost>
+            {noTorch ? (
+              <Primary onClick={() => go('connect-ble')}>Connect strap</Primary>
+            ) : null}
           </>
         )}
       </Foot>
@@ -931,47 +981,20 @@ export function ConnectCamera({ go, setSource, onCameraLocked }) {
   )
 }
 
-export function ConnectManual({ go, setSource }) {
-  const [left, setLeft] = useState(15)
-  const [beats, setBeats] = useState(0)
-  const running = left > 0
-  useEffect(() => {
-    if (!running) return undefined
-    const id = setInterval(() => setLeft((s) => s - 1), 1000)
-    return () => clearInterval(id)
-  }, [running])
+export function ConnectCamera(props) {
+  const { mode = 'connect' } = props
+  const [retryKey, setRetryKey] = useState(0)
   return (
-    <Screen>
-      <Status left={<Clock />} right="Manual" onBack={() => go('connect-camera')} />
-      <div className="screen-body">
-        <Kicker>Heart rate</Kicker>
-        <Title>Count your pulse</Title>
-        <Lead>Two fingers on your wrist or neck. Tap the button each time you feel a beat.</Lead>
-        <div className="countdown" aria-live="off">
-          {left}
-        </div>
-        <div className="kicker">Seconds left</div>
-        <button
-          type="button"
-          className="tap-pad"
-          onClick={() => running && setBeats((b) => b + 1)}
-          aria-label={`Tap on each beat. ${beats} beats counted. ${left} seconds left.`}
-        >
-          Tap on each beat · {beats}
-        </button>
-      </div>
-      <Foot>
-        <Primary
-          onClick={() => {
-            setSource('manual')
-            go('preflight')
-          }}
-        >
-          Done
-        </Primary>
-      </Foot>
-    </Screen>
+    <ConnectCameraInner
+      key={`${mode}-${retryKey}`}
+      {...props}
+      onRetry={() => setRetryKey((k) => k + 1)}
+    />
   )
+}
+
+export function PulseResync(props) {
+  return <ConnectCamera {...props} mode="resync" goTarget="active" />
 }
 
 function useSessionClock(active, startSeconds) {
@@ -1003,25 +1026,71 @@ function useBpm(base) {
   return bpm
 }
 
-function useSessionBpm(source, mockBase, cameraBpm) {
-  const useLockedCamera = source === 'camera' && cameraBpm != null
-  const mock = useBpm(useLockedCamera ? cameraBpm : mockBase)
-  return {
-    bpm: mock,
-    camera: null,
-    cameraOn: false,
-    lockedCamera: useLockedCamera,
-    lockedBpm: cameraBpm,
+function useTrackedSessionBpm({
+  source,
+  cameraBpm,
+  zone,
+  phase,
+  elapsedSec,
+  durationSec,
+  mockBase,
+}) {
+  const reduce = usePrefersReducedMotion()
+  const useCamera = source === 'camera' && cameraBpm != null && zone
+  const strapBpm = useBpm(mockBase)
+  const [bpm, setBpm] = useState(() => (useCamera ? cameraBpm : mockBase))
+  const tickRef = useRef(0)
+
+  useEffect(() => {
+    if (useCamera) setBpm(cameraBpm)
+  }, [useCamera, cameraBpm])
+
+  useEffect(() => {
+    if (!useCamera) return undefined
+    const tick = () => {
+      tickRef.current += 1
+      setBpm(
+        modelSessionBpm({
+          baseline: cameraBpm,
+          zone,
+          phase,
+          elapsedSec,
+          durationSec,
+          reduceMotion: reduce,
+          tick: tickRef.current,
+        }),
+      )
+    }
+    tick()
+    const id = setInterval(tick, reduce ? 2000 : 900)
+    return () => clearInterval(id)
+  }, [useCamera, cameraBpm, zone, phase, elapsedSec, durationSec, reduce])
+
+  if (!useCamera) {
+    return { bpm: strapBpm, lockedCamera: false, lockedBpm: cameraBpm }
   }
+  return { bpm, lockedCamera: true, lockedBpm: cameraBpm }
 }
 
-export function Warmup({ go, source, cameraBpm }) {
+export function Warmup({ go, source, cameraBpm, age, level }) {
+  const zone = targetZone(age, level)
   const [left] = useSessionClock(true, WARMUP_SECONDS)
-  const { bpm, lockedCamera, lockedBpm } = useSessionBpm(source, 96, cameraBpm)
+  const elapsed = WARMUP_SECONDS - left
+  const { bpm, lockedCamera, lockedBpm } = useTrackedSessionBpm({
+    source,
+    cameraBpm,
+    zone,
+    phase: 'warmup',
+    elapsedSec: elapsed,
+    durationSec: WARMUP_SECONDS,
+    mockBase: 96,
+  })
   const announced = useThrottledValue(bpm)
+  const nextScreen =
+    source === 'camera' && cameraBpm != null ? 'pulse-resync' : 'active'
   useEffect(() => {
-    if (left === 0) go('active')
-  }, [left, go])
+    if (left === 0) go(nextScreen)
+  }, [left, go, nextScreen])
   return (
     <Screen calm>
       <div className="session-top">
@@ -1030,7 +1099,7 @@ export function Warmup({ go, source, cameraBpm }) {
       </div>
       <p className="sr-only" aria-live="polite" aria-atomic="true">
         Warmup. {announced} beats per minute
-        {lockedCamera ? ', from camera lock' : ''}. {formatTime(left)} left. Ease in gently.
+        {lockedCamera ? ', tracked from pulse check' : ''}. {formatTime(left)} left. Ease in gently.
       </p>
       <div className="session-hero">
         <div className="cue">Ease in gently</div>
@@ -1042,12 +1111,12 @@ export function Warmup({ go, source, cameraBpm }) {
         </div>
         <p className="hint">
           {lockedCamera
-            ? `Tracking from your camera lock (${lockedBpm} bpm) — hands free, like a strap.`
+            ? `Tracking toward your target zone from pulse check (${lockedBpm} bpm at start) — hands free.`
             : 'Walk or pedal slowly. We’ll tell you when to settle into your target.'}
         </p>
       </div>
       <Foot>
-        <Secondary onClick={() => go('active')}>Skip to target</Secondary>
+        <Secondary onClick={() => go(nextScreen)}>Skip to target</Secondary>
         <Primary onClick={() => go('after')}>Stop</Primary>
       </Foot>
     </Screen>
@@ -1057,21 +1126,26 @@ export function Warmup({ go, source, cameraBpm }) {
 export function Active({ go, age, level, source, cameraBpm }) {
   const zone = targetZone(age, level)
   const [left] = useSessionClock(true, ACTIVE_SECONDS)
-  const { bpm, lockedCamera, lockedBpm } = useSessionBpm(source, 133, cameraBpm)
+  const elapsed = ACTIVE_SECONDS - left
+  const { bpm, lockedCamera, lockedBpm } = useTrackedSessionBpm({
+    source,
+    cameraBpm,
+    zone,
+    phase: 'active',
+    elapsedSec: elapsed,
+    durationSec: ACTIVE_SECONDS,
+    mockBase: 133,
+  })
   const announced = useThrottledValue(bpm)
   const status = zoneStatus(bpm, zone)
   const min = zone.low - 30
   const max = zone.high + 30
   const pct = ((bpm - min) / (max - min)) * 100
   const sourceLabel = lockedCamera
-    ? `Camera lock · tracking near ${lockedBpm} bpm`
-    : source === 'polar'
-      ? 'Chest strap — signal good'
-      : source === 'manual'
-        ? 'Manual pacing'
-        : source === 'camera'
-          ? 'Pacing estimate'
-          : 'Pacing estimate'
+    ? `Tracked pace · target ${zone.low}–${zone.high} · from pulse checks`
+    : source === 'polar' || source === 'garmin'
+      ? 'Chest strap · demo signal'
+      : 'Pacing estimate'
   useEffect(() => {
     if (left === 0) go('after')
   }, [left, go])
@@ -1122,8 +1196,17 @@ export function Active({ go, age, level, source, cameraBpm }) {
   )
 }
 
-export function Glance({ go, source, cameraBpm }) {
-  const { bpm, lockedCamera } = useSessionBpm(source, 133, cameraBpm)
+export function Glance({ go, source, cameraBpm, age, level }) {
+  const zone = targetZone(age, level)
+  const { bpm, lockedCamera } = useTrackedSessionBpm({
+    source,
+    cameraBpm,
+    zone,
+    phase: 'active',
+    elapsedSec: ACTIVE_SECONDS / 2,
+    durationSec: ACTIVE_SECONDS,
+    mockBase: 133,
+  })
   const announced = useThrottledValue(bpm)
   return (
     <Screen variant="glance" calm>

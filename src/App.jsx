@@ -7,7 +7,6 @@ import {
   Checkin,
   ConnectBle,
   ConnectCamera,
-  ConnectManual,
   DisclaimerScreen,
   Emergency,
   Glance,
@@ -20,6 +19,7 @@ import {
   Overall,
   Phone,
   Preflight,
+  PulseResync,
   RedFlags,
   Risk,
   RiskConsent,
@@ -129,7 +129,7 @@ export default function App() {
           setOverall(today.overall)
           setBefore(today.overall)
         }
-        if (today.hrSource) setSource(today.hrSource)
+        if (today.hrSource) setSource(today.hrSource === 'manual' ? null : today.hrSource)
         setTodayReady(true)
       })
       .catch((err) => {
@@ -365,9 +365,10 @@ export default function App() {
   }
 
   function persistSource(nextSource) {
-    setSource(nextSource)
-    if (profileId && sessionId) {
-      api.setSessionSource(profileId, sessionId, nextSource).catch((err) => {
+    const normalized = nextSource === 'manual' ? null : nextSource
+    setSource(normalized)
+    if (profileId && sessionId && normalized) {
+      api.setSessionSource(profileId, sessionId, normalized).catch((err) => {
         console.warn('Could not save heart-rate source', err)
         setSaveError(SAVE_SOURCE)
       })
@@ -544,12 +545,24 @@ export default function App() {
       <ConnectCamera {...shared} setSource={persistSource} onCameraLocked={persistCameraLock} />
     )
   }
-  if (screen === 'connect-manual') view = <ConnectManual {...shared} setSource={persistSource} />
-  if (screen === 'warmup') view = <Warmup {...shared} source={source} cameraBpm={cameraBpm} />
+  if (screen === 'pulse-resync') {
+    view = (
+      <PulseResync {...shared} setSource={persistSource} onCameraLocked={persistCameraLock} />
+    )
+  }
+  if (screen === 'warmup') {
+    view = (
+      <Warmup {...shared} source={source} cameraBpm={cameraBpm} age={age} level={level} />
+    )
+  }
   if (screen === 'active') {
     view = <Active {...shared} age={age} level={level} source={source} cameraBpm={cameraBpm} />
   }
-  if (screen === 'glance') view = <Glance {...shared} source={source} cameraBpm={cameraBpm} />
+  if (screen === 'glance') {
+    view = (
+      <Glance {...shared} source={source} cameraBpm={cameraBpm} age={age} level={level} />
+    )
+  }
   if (screen === 'after') {
     view = <After {...shared} after={after} setAfter={setAfter} onSave={persistAfter} />
   }

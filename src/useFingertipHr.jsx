@@ -1,7 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
-import { createFingertipMonitor, evaluateHrLockWithSoft, isUsableBpm, signalQuality } from './hrCamera.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  createFingertipMonitor,
+  evaluateHrLockWithSoft,
+  HR_LOCK,
+  isUsableBpm,
+  signalQuality,
+} from './hrCamera.js'
 
 const idleLock = () => evaluateHrLockWithSoft([])
+const LOCK_SAMPLE_MS = 180
 
 /**
  * Live fingertip PPG. Watch-style lock when BPM is stable for a few seconds.
@@ -28,6 +35,12 @@ export function useFingertipHr({
   const [hostReady, setHostReady] = useState(false)
   const [torch, setTorch] = useState({ on: false, supported: false })
   const [lock, setLock] = useState(idleLock)
+  const [timedOut, setTimedOut] = useState(false)
+
+  const stop = useCallback(() => {
+    monitorRef.current?.stop()
+    monitorRef.current = null
+  }, [])
 
   useEffect(() => {
     setHostReady(Boolean(videoRef.current && sampleRef.current))
@@ -36,8 +49,7 @@ export function useFingertipHr({
   function pushLockSample(nextBpm, nextQuality) {
     if (!trackLock || !isUsableBpm(nextBpm)) return
     const t = Date.now()
-    // ~2 samples/sec — enough for lock without spread noise from duplicate frames
-    if (t - lastLockPushRef.current < 280) return
+    if (t - lastLockPushRef.current < LOCK_SAMPLE_MS) return
     lastLockPushRef.current = t
     lockSamplesRef.current.push({ t, bpm: nextBpm, quality: nextQuality })
     const cutoff = t - 10000
@@ -47,15 +59,16 @@ export function useFingertipHr({
 
   useEffect(() => {
     if (!enabled || !hostReady) {
-      monitorRef.current?.stop()
-      monitorRef.current = null
+      stop()
       if (!enabled) {
         setBpm(null)
         setReady(false)
         setError(null)
+        setTimedOut(false)
         setQuality(signalQuality({ average: 0, range: 0 }))
         setTorch({ on: false, supported: false })
         lockSamplesRef.current = []
+        lastLockPushRef.current = 0
         setLock(idleLock())
       }
       return undefined
@@ -68,7 +81,14 @@ export function useFingertipHr({
     let cancelled = false
     lockSamplesRef.current = []
     lastLockPushRef.current = 0
+    setTimedOut(false)
     setLock(idleLock())
+
+    const contactTimer = window.setTimeout(() => {
+      if (cancelled) return
+      setTimedOut(true)
+      stop()
+    }, HR_LOCK.maxContactMs)
 
     const monitor = createFingertipMonitor({
       videoElement: video,
@@ -78,7 +98,7 @@ export function useFingertipHr({
         getComputedStyle(document.documentElement).getPropertyValue('--in').trim() || '#6fa287',
       preferTorch,
       torchMaxMs,
-      startDelayMs: startDelayMs ?? (preferTorch ? 700 : undefined),
+      startDelayMs: startDelayMs ?? (preferTorch ? 400 : undefined),
       onBpmChange: (next) => {
         if (!cancelled) {
           setBpm(next)
@@ -92,7 +112,10 @@ export function useFingertipHr({
         if (isUsableBpm(stats.bpm)) pushLockSample(stats.bpm, stats.quality)
         if (
           isUsableBpm(stats.bpm) &&
-          (stats.quality.level === 'good' || stats.quality.level === 'ok')
+          (stats.quality.level === 'good' ||
+            stats.quality.level === 'ok' ||
+            stats.quality.level === 'weak' ||
+            stats.quality.level === 'noisy')
         ) {
           setReady(true)
         }
@@ -112,10 +135,11 @@ export function useFingertipHr({
 
     return () => {
       cancelled = true
+      window.clearTimeout(contactTimer)
       monitor.stop()
       monitorRef.current = null
     }
-  }, [enabled, showGraph, hostReady, trackLock, preferTorch, torchMaxMs, startDelayMs])
+  }, [enabled, showGraph, hostReady, trackLock, preferTorch, torchMaxMs, startDelayMs, stop])
 
   const nodes = (
     <>
@@ -125,5 +149,16 @@ export function useFingertipHr({
     </>
   )
 
-  return { bpm, quality, error, ready, nodes, usable: isUsableBpm(bpm), torch, lock }
+  return {
+    bpm,
+    quality,
+    error,
+    ready,
+    nodes,
+    usable: isUsableBpm(bpm),
+    torch,
+    lock,
+    timedOut,
+    stop,
+  }
 }

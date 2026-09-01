@@ -78,6 +78,9 @@ export function signalQuality({ average, range }) {
     return { level: 'poor', label: 'Too dark — cover the lens' }
   }
   if (average > 0.92) {
+    if (range >= 0.0015) {
+      return { level: 'ok', label: 'OK — hold steady' }
+    }
     return { level: 'poor', label: 'Too bright — cover flash and lens' }
   }
   if (range < 0.0015) {
@@ -112,10 +115,14 @@ export const HR_LOCK = {
   holdMs: 400,
 }
 
-function qualityOkForLock(quality) {
+function qualityOkForLock(quality, bpm) {
+  if (!isUsableBpm(bpm)) return false
   const level = quality?.level
-  if (!level) return true
-  return !HR_LOCK.excludeQuality.includes(level)
+  if (!level || level !== 'poor') return true
+  const label = quality?.label || ''
+  // Covered fingertip on flash reads bright — BPM still valid
+  if (label.includes('Too bright')) return true
+  return false
 }
 
 function median(values) {
@@ -131,13 +138,16 @@ function median(values) {
  */
 export function evaluateHrLock(samples, now = Date.now()) {
   const window = samples.filter((s) => now - s.t <= HR_LOCK.windowMs)
-  const usable = window.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality))
+  const usable = window.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality, s.bpm))
 
   if (!usable.length) {
     return { phase: 'searching', locked: false, lockedBpm: null, progress: 0, spread: null }
   }
 
-  const progress = Math.min(1, usable.length / HR_LOCK.minSamples)
+  const elapsed = now - usable[0].t
+  const sampleProgress = Math.min(1, usable.length / HR_LOCK.minSamples)
+  const timeProgress = Math.min(1, elapsed / HR_LOCK.emergencyLockMs)
+  const progress = Math.max(sampleProgress, timeProgress)
   const bpms = usable.map((s) => s.bpm)
   const spread = Math.max(...bpms) - Math.min(...bpms)
 
@@ -164,7 +174,7 @@ export function evaluateHrLockWithSoft(samples, now = Date.now()) {
   const result = evaluateHrLock(samples, now)
   if (result.locked) return result
 
-  const usable = samples.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality))
+  const usable = samples.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality, s.bpm))
   if (!usable.length) return result
 
   const elapsed = now - usable[0].t
