@@ -132,7 +132,7 @@ function parseHrSource(value) {
 }
 
 function todayPayload(profile, localDate) {
-  const zone = targetZone(profile.age)
+  const zone = targetZone(profile.age, profile.level)
   const todayCheckin = store.getCheckinByDate(profile.id, localDate)
   const latest = todayCheckin || store.latestCheckin(profile.id)
   const overall = latest?.overall ?? null
@@ -171,7 +171,7 @@ function clinicianLog(profile) {
       ...profile,
       day: dayNumber(profile.injuryDate),
       outlook: outlookFromAnswers(profile.answers),
-      zone: targetZone(profile.age),
+      zone: targetZone(profile.age, profile.level),
     },
     summary: {
       checkins: checkins.length,
@@ -310,7 +310,7 @@ app.post('/api/profiles/:profileId/sessions', (req, res) => {
     return res.status(201).json({ session, redirect: 'not-today' })
   }
 
-  const zone = targetZone(profile.age)
+  const zone = targetZone(profile.age, profile.level)
   const session = store.createSession({
     id: crypto.randomUUID(),
     profileId: profile.id,
@@ -413,14 +413,18 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ error: { code: 'server_error', message: 'Something went wrong.' } })
 })
 
-const server = app.listen(PORT, () => {
-  console.log(`Threshold API on http://localhost:${PORT}`)
-})
+export default app
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.log(`Threshold API already running on http://localhost:${PORT}`)
-    process.exit(0)
-  }
-  throw err
-})
+if (!process.env.VERCEL) {
+  const server = app.listen(PORT, () => {
+    console.log(`Threshold API on http://localhost:${PORT}`)
+  })
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`Threshold API already running on http://localhost:${PORT}`)
+      process.exit(0)
+    }
+    throw err
+  })
+}

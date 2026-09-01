@@ -8,7 +8,14 @@
     "dev:api": "node server/index.js",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "node server/index.js"
+    "start": "node server/index.js",
+    "deploy:prod": "npx vercel --prod",
+    "run": "npx vercel --prod",
+    "cy:open": "cypress open",
+    "cy:run": "cypress run --spec cypress/e2e/local/**/*.cy.js"
+  },
+  "engines": {
+    "node": "24.x"
   },
   "dependencies": {
     "better-sqlite3": "^12.11.1",
@@ -19,6 +26,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.2",
+    "cypress": "^15.21.1",
     "vite": "^7.1.3"
   }
 }

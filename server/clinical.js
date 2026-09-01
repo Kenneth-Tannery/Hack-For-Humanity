@@ -3,7 +3,9 @@ import {
   OVERALL_LABELS,
   RED_FLAGS,
   RISK_QUESTIONS,
+  SESSION_MINUTES,
   SYMPTOMS,
+  LEVEL_ZONE_BANDS,
   dayNumber,
   targetZone,
 } from '../src/data.js'
@@ -13,7 +15,9 @@ export {
   OVERALL_LABELS,
   RED_FLAGS,
   RISK_QUESTIONS,
+  SESSION_MINUTES,
   SYMPTOMS,
+  LEVEL_ZONE_BANDS,
   dayNumber,
   targetZone,
 }
@@ -30,7 +34,6 @@ export const MAX_HOUR_DELTA = 2
 export const LEVEL_MIN = 1
 export const LEVEL_MAX = 5
 export const LEVEL_START = 2
-export const SESSION_MINUTES = 20
 
 export const HR_SOURCES = ['polar', 'garmin', 'camera', 'manual']
 export const RISK_IDS = RISK_QUESTIONS.map((q) => q.id)
@@ -115,9 +118,12 @@ export function catalog() {
       maxHourDelta: MAX_HOUR_DELTA,
       sessionMinutes: SESSION_MINUTES,
       hrZone: {
-        lowPct: 0.63,
-        highPct: 0.68,
         maxHrFormula: '220-age',
+        levelBands: LEVEL_ZONE_BANDS,
+        citations: [
+          'Concussion Alliance at-home aerobic stages',
+          'Amsterdam consensus 2023 return-to-sport HR steps',
+        ],
       },
       levels: { min: LEVEL_MIN, max: LEVEL_MAX, start: LEVEL_START },
     },

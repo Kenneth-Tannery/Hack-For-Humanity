@@ -102,6 +102,13 @@ export const OVERALL_LABELS = {
   10: 'Worst it has been',
 }
 
+/** Buffalo-style bout length shown in the UI and stored on sessions. */
+export const SESSION_MINUTES = 20
+/** Ease-in before the target-zone block. */
+export const WARMUP_SECONDS = 3 * 60
+/** Remainder of the 20-minute bout after warmup. */
+export const ACTIVE_SECONDS = SESSION_MINUTES * 60 - WARMUP_SECONDS
+
 export function dayNumber(injuryDate) {
   const start = new Date(`${injuryDate}T00:00:00`)
   if (Number.isNaN(start.getTime())) return 1
@@ -121,11 +128,41 @@ export function formatInjuryDate(iso) {
   })
 }
 
-export function targetZone(age) {
+/** Local calendar date as YYYY-MM-DD (for date inputs and “today” checks). */
+export function localDate(d = new Date()) {
+  const yy = d.getFullYear()
+  const mm = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
+/** Per-level target bands (% of age-predicted max HR). Concussion Alliance at-home stages; Amsterdam 2023 return-to-sport steps. */
+export const LEVEL_ZONE_BANDS = {
+  1: { lowPct: 0.5, highPct: 0.55 },
+  2: { lowPct: 0.55, highPct: 0.6 },
+  3: { lowPct: 0.6, highPct: 0.65 },
+  4: { lowPct: 0.65, highPct: 0.7 },
+  5: { lowPct: 0.7, highPct: 0.75 },
+}
+
+function clampLevel(level) {
+  const n = Number(level)
+  if (!Number.isFinite(n)) return 2
+  return Math.min(5, Math.max(1, Math.round(n)))
+}
+
+/** Age-predicted max HR (220 − age) with level-based subthreshold band. */
+export function targetZone(age, level = 2) {
   const max = 220 - Number(age || 16)
+  const lv = clampLevel(level)
+  const band = LEVEL_ZONE_BANDS[lv] ?? LEVEL_ZONE_BANDS[2]
   return {
-    low: Math.round(max * 0.63),
-    high: Math.round(max * 0.68),
+    low: Math.round(max * band.lowPct),
+    high: Math.round(max * band.highPct),
+    lowPct: band.lowPct,
+    highPct: band.highPct,
+    level: lv,
+    maxHr: max,
   }
 }
 

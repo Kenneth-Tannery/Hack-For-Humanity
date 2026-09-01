@@ -11,9 +11,9 @@
   --in: #6fa287;
   --above: #c98a3e;
   --alert: #b5544a;
-  --alert-deep: #5c241f;
-  --alert-ink: #f7ece9;
-  --alert-muted: #e8d4d0;
+  --alert-deep: #4a1c18;
+  --alert-ink: #fff8f6;
+  --alert-muted: #f0d8d3;
   --line: #332f2d;
   --btn: #e8e3dd;
   --btn-ink: #1a1817;
@@ -22,6 +22,7 @@
   --pad: 24px;
   --radius: 18px;
   --phone: 390px;
+  --tap: max(44px, 2.75rem);
 }
 
 :root[data-theme='paper'] {
@@ -88,6 +89,28 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
+.screen.is-emergency button:focus-visible,
+.screen.is-emergency a:focus-visible {
+  outline-color: var(--alert-ink);
+}
+
+.screen.is-emergency .btn-ghost {
+  color: var(--alert-ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  box-shadow: inset 0 0 0 1px rgba(255, 248, 246, 0.35);
+}
+
+.screen.is-emergency .btn-emergency {
+  background: #fff8f6;
+  color: #1a1210;
+  font-weight: 800;
+}
+
+.screen.is-emergency .disclaimer {
+  color: var(--alert-muted);
+}
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -148,6 +171,36 @@ input:focus-visible {
   min-height: 0;
   display: flex;
   flex-direction: column;
+}
+
+.phone > .voice-dock,
+.phone > .save-error {
+  flex: 0 0 auto;
+  display: grid;
+}
+
+.save-error {
+  margin: 0 var(--pad) 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--alert-deep);
+  color: var(--alert-ink);
+  gap: 8px;
+}
+
+.save-error p {
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.save-error-dismiss {
+  justify-self: start;
+  min-height: var(--tap);
+  padding: 0 4px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--alert-ink);
+  text-decoration: underline;
 }
 
 .screen {
@@ -242,6 +295,74 @@ button.screen-body {
   letter-spacing: -0.02em;
   flex-shrink: 0;
   margin-right: -2px;
+}
+
+.audio-bar {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+  flex-shrink: 0;
+}
+
+.audio-bar-btn {
+  min-height: 44px;
+  width: 100%;
+}
+
+.voice-dock {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 0 var(--pad) 8px;
+  flex-shrink: 0;
+}
+
+.voice-dock-btn {
+  min-height: 44px;
+  width: 100%;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+  background: var(--raised);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  min-height: 52px;
+}
+
+.toggle-row strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.toggle-row small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-2);
+  font-size: 0.875rem;
+}
+
+.toggle-pill {
+  flex-shrink: 0;
+  min-width: 52px;
+  min-height: 32px;
+  border-radius: 999px;
+  padding: 0 12px;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  background: var(--line);
+  color: var(--ink-2);
+}
+
+.toggle-row.on .toggle-pill {
+  background: var(--select);
+  color: var(--select-ink);
 }
 
 .kicker {
@@ -366,7 +487,7 @@ button.screen-body {
 }
 
 .btn {
-  min-height: max(44px, clamp(44px, 6.4vh, 56px));
+  min-height: max(var(--tap), clamp(44px, 6.4vh, 56px));
   border-radius: 999px;
   padding: 12px 20px;
   font-size: 1.0625rem;
@@ -389,7 +510,7 @@ button.screen-body {
 .btn-ghost {
   background: transparent;
   color: var(--ink-2);
-  min-height: 44px;
+  min-height: var(--tap);
 }
 
 .btn-danger {
@@ -548,8 +669,8 @@ button.screen-body {
   align-items: center;
   gap: 14px;
   text-align: left;
-  min-height: 44px;
-  padding: 10px 0;
+  min-height: var(--tap);
+  padding: 12px 0;
   border-bottom: 1px solid var(--line);
   font-size: 1rem;
   width: 100%;
@@ -794,6 +915,83 @@ button.screen-body {
   place-items: center;
 }
 
+.hr-stage {
+  position: relative;
+  flex: 1;
+  min-height: 96px;
+  max-height: 180px;
+  background: var(--sunken);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.hr-host {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+}
+
+.hr-video,
+.hr-sample {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hr-stage .hr-graph {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  display: block;
+}
+
+.hr-lock-bar {
+  margin-top: 10px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+
+.hr-lock-bar-hero {
+  margin-top: 4px;
+  margin-bottom: 14px;
+  max-width: 280px;
+}
+
+.hr-lock-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--in);
+  transition: width 0.25s ease;
+}
+
+.hr-stage-compact {
+  min-height: 72px;
+  max-height: 96px;
+  margin-top: 12px;
+  flex: 0;
+}
+
+.hr-hint {
+  position: absolute;
+  left: 12px;
+  bottom: 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  pointer-events: none;
+}
+
 .wave svg {
   width: 100%;
   height: 100%;
@@ -893,5 +1091,20 @@ button.screen-body {
   .bpm.live,
   .glance-bpm {
     animation: none !important;
+  }
+}
+
+/* Prefer rem-based type so OS / browser text scaling stays readable */
+@media (min-resolution: 2dppx) {
+  .title {
+    line-height: 1.15;
+  }
+}
+
+@media (min-width: 0) {
+  .lead,
+  .card-copy,
+  .check-row {
+    line-height: 1.45;
   }
 }

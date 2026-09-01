@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
-import { SYMPTOMS } from './data.js'
+import { dayNumber, localDate, RISK_QUESTIONS, SYMPTOMS, targetZone } from './data.js'
 import {
   Active,
   After,
@@ -23,34 +23,82 @@ import {
   RedFlags,
   Risk,
   RiskConsent,
+  Settings,
   Splash,
   Symptom,
   Warmup,
 } from './screens.jsx'
+import {
+  canSpeak,
+  cancelSpeak,
+  readAudioPreference,
+  readVoiceGuidePreference,
+  repeatLast,
+  screenPrompt,
+  speak,
+  writeAudioPreference,
+  writeVoiceGuidePreference,
+} from './speech.js'
+import { VoiceDock, SaveError } from './ui.jsx'
 
 const THEME_KEY = 'threshold-theme'
+const SAVE_PROFILE = 'Could not save your setup. Check the connection, then tap Start again.'
+const SAVE_CHECKIN = 'Could not save today’s check-in. Try Save again.'
+const SAVE_SESSION =
+  'Could not record this session on the server. You can continue; it may not appear in your log.'
+const SAVE_AFTER = 'Could not save that rating. Try Save again.'
+const SAVE_HOUR = 'Could not save the follow-up rating. Try again.'
+const SAVE_SOURCE = 'Could not save the heart-rate source.'
+const LOAD_TODAY = 'Could not load today. Check the connection.'
+const PROFILE_GONE = 'Saved profile was not found. Please set up again.'
 
 export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem(THEME_KEY) || 'dark')
-  const [screen, setScreen] = useState('splash')
-  const [injuryDate, setInjuryDate] = useState('2026-08-12')
+  const [screen, setScreen] = useState(() => (api.savedProfileId() ? 'home' : 'splash'))
+  const [settingsBack, setSettingsBack] = useState('home')
+  const [injuryDate, setInjuryDate] = useState(() => localDate())
   const [age, setAge] = useState('16')
   const [riskIndex, setRiskIndex] = useState(0)
   const [answers, setAnswers] = useState({})
   const [flags, setFlags] = useState([])
   const [scores, setScores] = useState(() => Array(SYMPTOMS.length).fill(null))
   const [symptomIndex, setSymptomIndex] = useState(0)
+  const [symptomFrom, setSymptomFrom] = useState('checkin')
+  const [pendingSession, setPendingSession] = useState(false)
+  const [saveError, setSaveError] = useState(null)
+  const [todayReady, setTodayReady] = useState(() => !api.savedProfileId())
   const [overall, setOverall] = useState(3)
   const [logged, setLogged] = useState(false)
   const [before, setBefore] = useState(3)
   const [after, setAfter] = useState(6)
   const [hour, setHour] = useState(5)
   const [source, setSource] = useState(null)
+  const [cameraBpm, setCameraBpm] = useState(null)
   const [strap, setStrap] = useState('polar')
   const [level, setLevel] = useState(2)
   const [streak, setStreak] = useState(0)
   const [profileId, setProfileId] = useState(() => api.savedProfileId())
   const [sessionId, setSessionId] = useState(null)
+  const [audioCheckin, setAudioCheckinState] = useState(() => readAudioPreference())
+  const [voiceGuide, setVoiceGuideState] = useState(() => readVoiceGuidePreference())
+  const [voiceMuted, setVoiceMuted] = useState(false)
+  const prevScreen = useRef(screen)
+  const prevRisk = useRef(riskIndex)
+  const prevVoice = useRef(false)
+
+  function setAudioCheckin(on) {
+    setAudioCheckinState(on)
+    writeAudioPreference(on)
+  }
+
+  function setVoiceGuide(on) {
+    setVoiceGuideState(on)
+    writeVoiceGuidePreference(on)
+    if (on) {
+      setAudioCheckin(true)
+      setVoiceMuted(false)
+    }
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -58,12 +106,20 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
+    if (screen === 'injury' && !profileId) {
+      setInjuryDate(localDate())
+    }
+  }, [screen, profileId])
+
+  useEffect(() => {
     if (screen !== 'home' || !profileId) return undefined
     let cancelled = false
+    setTodayReady(false)
     api
       .getToday(profileId)
       .then((today) => {
         if (cancelled) return
+        setSaveError(null)
         setInjuryDate(today.injuryDate)
         setAge(String(today.age))
         setLevel(today.level)
@@ -74,21 +130,145 @@ export default function App() {
           setBefore(today.overall)
         }
         if (today.hrSource) setSource(today.hrSource)
+        setTodayReady(true)
       })
-      .catch(() => {})
+      .catch((err) => {
+        if (cancelled) return
+        if (err.status === 404) {
+          api.forgetProfileId()
+          setProfileId('')
+          setInjuryDate(localDate())
+          setScreen('splash')
+          setSaveError(PROFILE_GONE)
+          setTodayReady(true)
+          return
+        }
+        setSaveError(LOAD_TODAY)
+        setTodayReady(true)
+      })
     return () => {
       cancelled = true
     }
   }, [screen, profileId])
 
+  // Full-app voice guide: speak each screen (symptom/overall handle their own lines)
+  useEffect(() => {
+    const screenChanged = prevScreen.current !== screen
+    const riskTurn = screen === 'risk' && (screenChanged || prevRisk.current !== riskIndex)
+    const guideJustOn = voiceGuide && !prevVoice.current
+    prevScreen.current = screen
+    prevRisk.current = riskIndex
+    prevVoice.current = voiceGuide
+
+    const checkinVoice =
+      audioCheckin && (screen === 'symptom' || screen === 'overall')
+    const guideHere = voiceGuide && screen !== 'symptom' && screen !== 'overall'
+
+    if (!canSpeak() || voiceMuted) {
+      cancelSpeak()
+      return undefined
+    }
+
+    if (checkinVoice) return undefined
+
+    if (guideHere && (screenChanged || riskTurn || guideJustOn)) {
+      const prompt = screenPrompt(screen, {
+        day: dayNumber(injuryDate),
+        level,
+        overall,
+        zone: targetZone(age, level),
+        riskTitle: RISK_QUESTIONS[riskIndex]?.title,
+        symptomName: SYMPTOMS[symptomIndex],
+        settled: hour - before <= 2 && after - before <= 2,
+        logged,
+        pendingSession,
+      })
+      if (prompt) speak(prompt)
+    } else if (!voiceGuide && !checkinVoice) {
+      cancelSpeak()
+    }
+
+    return undefined
+  }, [
+    screen,
+    voiceGuide,
+    voiceMuted,
+    audioCheckin,
+    injuryDate,
+    level,
+    overall,
+    age,
+    riskIndex,
+    symptomIndex,
+    before,
+    after,
+    hour,
+    logged,
+    pendingSession,
+  ])
+
   function go(next) {
+    if (next === 'home') setPendingSession(false)
+    if (next === 'settings') setSettingsBack(screen === 'settings' ? settingsBack : screen)
     if (next === 'risk' && screen === 'risk-consent') setRiskIndex(0)
-    if (next === 'symptom' && screen === 'checkin') setSymptomIndex(0)
-    if (next === 'red-flags' && (screen === 'home' || screen === 'not-today')) setFlags([])
+    if (next === 'injury' && !profileId) setInjuryDate(localDate())
+    if (next === 'symptom' && (screen === 'checkin' || screen === 'home')) {
+      setSymptomIndex(0)
+      setSymptomFrom(screen)
+    }
+    if (next === 'red-flags') setFlags([])
     setScreen(next)
   }
 
+  function openCheckin() {
+    setPendingSession(false)
+    go('checkin')
+  }
+
+  function startSessionAttempt() {
+    if (!todayReady) return
+    setCameraBpm(null)
+    if (!logged) {
+      setPendingSession(true)
+      go('checkin')
+      return
+    }
+    go('red-flags')
+  }
+
+  async function persistInjuryDate(nextDate) {
+    setInjuryDate(nextDate)
+    if (!profileId) return
+    try {
+      await api.updateProfile(profileId, { injuryDate: nextDate, age, answers })
+      setSaveError(null)
+    } catch (err) {
+      console.warn('Could not save injury date', err)
+      setSaveError(SAVE_PROFILE)
+    }
+  }
+
+  async function resetSetup() {
+    setSaveError(null)
+    try {
+      if (profileId) await api.deleteProfile(profileId)
+    } catch (err) {
+      console.warn('Could not delete profile', err)
+    }
+    api.forgetProfileId()
+    setProfileId('')
+    setSessionId(null)
+    setLogged(false)
+    setStreak(0)
+    setAnswers({})
+    setScores(Array(SYMPTOMS.length).fill(null))
+    setInjuryDate(localDate())
+    setTodayReady(true)
+    go('splash')
+  }
+
   async function persistProfile() {
+    setSaveError(null)
     try {
       if (profileId) {
         await api.updateProfile(profileId, { injuryDate, age, answers })
@@ -98,10 +278,12 @@ export default function App() {
         setProfileId(id)
         applyToday(result.today)
       }
+      setTodayReady(true)
+      go('home')
     } catch (err) {
       console.warn('Could not save profile', err)
+      setSaveError(SAVE_PROFILE)
     }
-    go('home')
   }
 
   function applyToday(today) {
@@ -116,20 +298,41 @@ export default function App() {
   }
 
   async function persistCheckin() {
-    setLogged(true)
-    setBefore(overall)
-    if (profileId) {
+    setSaveError(null)
+    let id = profileId
+    try {
+      // After a Vercel redeploy the old profile id can be gone — recreate from onboarding fields.
+      if (!id) {
+        const created = await api.createProfile({ injuryDate, age, answers })
+        id = api.rememberProfileId(created.profile.id)
+        setProfileId(id)
+      }
+      let result
       try {
-        const result = await api.saveCheckin(profileId, {
+        result = await api.saveCheckin(id, {
           scores: scores.map((n) => n ?? 0),
           overall,
         })
-        applyToday(result.today)
       } catch (err) {
-        console.warn('Could not save check-in', err)
+        if (err.status !== 404) throw err
+        const created = await api.createProfile({ injuryDate, age, answers })
+        id = api.rememberProfileId(created.profile.id)
+        setProfileId(id)
+        result = await api.saveCheckin(id, {
+          scores: scores.map((n) => n ?? 0),
+          overall,
+        })
       }
+      setLogged(true)
+      setBefore(overall)
+      applyToday(result.today)
+      const next = pendingSession ? 'red-flags' : 'home'
+      setPendingSession(false)
+      go(next)
+    } catch (err) {
+      console.warn('Could not save check-in', err)
+      setSaveError(SAVE_CHECKIN)
     }
-    go('home')
   }
 
   async function gateSession(redFlags, intent) {
@@ -142,14 +345,23 @@ export default function App() {
           hrSource: source,
         })
         setSessionId(result.session.id)
+        setSaveError(null)
         return result.redirect
       } catch (err) {
         console.warn('Could not start session', err)
+        setSaveError(SAVE_SESSION)
       }
+    } else {
+      setSaveError(SAVE_SESSION)
     }
     if (intent === 'emergency' || redFlags.length) return 'emergency'
     if (overall >= 8) return 'not-today'
     return 'preflight'
+  }
+
+  function persistCameraLock(bpm) {
+    setCameraBpm(bpm)
+    persistSource('camera')
   }
 
   function persistSource(nextSource) {
@@ -157,35 +369,60 @@ export default function App() {
     if (profileId && sessionId) {
       api.setSessionSource(profileId, sessionId, nextSource).catch((err) => {
         console.warn('Could not save heart-rate source', err)
+        setSaveError(SAVE_SOURCE)
       })
     }
   }
 
   async function persistAfter() {
+    setSaveError(null)
     if (profileId && sessionId) {
       try {
         await api.saveAfter(profileId, sessionId, after)
       } catch (err) {
         console.warn('Could not save after-session rating', err)
+        setSaveError(SAVE_AFTER)
+        return
       }
     }
     go('hour')
   }
 
   async function persistHour() {
+    setSaveError(null)
     if (profileId && sessionId) {
       try {
-        await api.saveHour(profileId, sessionId, { hour, after })
+        const result = await api.saveHour(profileId, sessionId, { hour, after })
+        const next = result?.evaluation?.nextLevel ?? result?.today?.level
+        if (next != null) setLevel(next)
       } catch (err) {
         console.warn('Could not save follow-up rating', err)
+        setSaveError(SAVE_HOUR)
+        return
       }
     }
     go('held')
   }
 
   const shared = { go, theme, setTheme }
+  const voiceDockVisible =
+    canSpeak() && (voiceGuide || (audioCheckin && (screen === 'symptom' || screen === 'overall')))
+
   let view = <Splash {...shared} />
 
+  if (screen === 'settings') {
+    view = (
+      <Settings
+        {...shared}
+        injuryDate={injuryDate}
+        onInjuryDateChange={persistInjuryDate}
+        onResetSetup={resetSetup}
+        voiceGuide={voiceGuide}
+        setVoiceGuide={setVoiceGuide}
+        settingsBack={settingsBack}
+      />
+    )
+  }
   if (screen === 'disclaimer') view = <DisclaimerScreen {...shared} />
   if (screen === 'injury') {
     view = (
@@ -220,6 +457,10 @@ export default function App() {
         overall={overall}
         logged={logged}
         level={level}
+        todayReady={todayReady}
+        setAudioCheckin={setAudioCheckin}
+        onOpenCheckin={openCheckin}
+        onStartSession={startSessionAttempt}
       />
     )
   }
@@ -234,9 +475,20 @@ export default function App() {
       />
     )
   }
-  if (screen === 'emergency') view = <Emergency />
-  if (screen === 'not-today') view = <NotToday {...shared} overall={overall} />
-  if (screen === 'checkin') view = <Checkin {...shared} overall={overall} streak={streak} logged={logged} />
+  if (screen === 'emergency') view = <Emergency go={go} />
+  if (screen === 'not-today') view = <NotToday {...shared} overall={overall} onOpenCheckin={openCheckin} />
+  if (screen === 'checkin') {
+    view = (
+      <Checkin
+        {...shared}
+        overall={overall}
+        streak={streak}
+        logged={logged}
+        setAudioCheckin={setAudioCheckin}
+        pendingSession={pendingSession}
+      />
+    )
+  }
   if (screen === 'symptom') {
     view = (
       <Symptom
@@ -245,6 +497,10 @@ export default function App() {
         setIndex={setSymptomIndex}
         scores={scores}
         setScores={setScores}
+        audioCheckin={audioCheckin}
+        voiceGuide={voiceGuide}
+        voiceMuted={voiceMuted}
+        backScreen={symptomFrom}
       />
     )
   }
@@ -255,6 +511,9 @@ export default function App() {
         overall={overall}
         setOverall={setOverall}
         onSave={persistCheckin}
+        audioCheckin={audioCheckin}
+        voiceGuide={voiceGuide}
+        voiceMuted={voiceMuted}
       />
     )
   }
@@ -280,11 +539,17 @@ export default function App() {
       />
     )
   }
-  if (screen === 'connect-camera') view = <ConnectCamera {...shared} setSource={persistSource} />
+  if (screen === 'connect-camera') {
+    view = (
+      <ConnectCamera {...shared} setSource={persistSource} onCameraLocked={persistCameraLock} />
+    )
+  }
   if (screen === 'connect-manual') view = <ConnectManual {...shared} setSource={persistSource} />
-  if (screen === 'warmup') view = <Warmup {...shared} />
-  if (screen === 'active') view = <Active {...shared} age={age} source={source} />
-  if (screen === 'glance') view = <Glance {...shared} />
+  if (screen === 'warmup') view = <Warmup {...shared} source={source} cameraBpm={cameraBpm} />
+  if (screen === 'active') {
+    view = <Active {...shared} age={age} level={level} source={source} cameraBpm={cameraBpm} />
+  }
+  if (screen === 'glance') view = <Glance {...shared} source={source} cameraBpm={cameraBpm} />
   if (screen === 'after') {
     view = <After {...shared} after={after} setAfter={setAfter} onSave={persistAfter} />
   }
@@ -302,6 +567,22 @@ export default function App() {
       <div key={screen} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {view}
       </div>
+      <SaveError message={saveError} onDismiss={() => setSaveError(null)} />
+      <VoiceDock
+        visible={voiceDockVisible}
+        muted={voiceMuted}
+        onRepeat={() => {
+          if (!voiceMuted) repeatLast()
+        }}
+        onMute={() => {
+          setVoiceMuted((m) => {
+            const next = !m
+            if (next) cancelSpeak()
+            else repeatLast()
+            return next
+          })
+        }}
+      />
     </Phone>
   )
 }

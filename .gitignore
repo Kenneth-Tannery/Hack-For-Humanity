@@ -7,3 +7,21 @@ dist
 *.log
 *.db
 server/data
+
+# Local docs / agent notes — not product, do not ship
+FLOW.md
+AGENTS.md
+
+# Local-only test tooling (run on this machine; do not ship)
+scripts/speech-smoke.mjs
+cypress/
+cypress.config.js
+cypress.config.mjs
+cypress.config.ts
+.vercel
+
+# Vercel CLI cache — local project link only; NOT .env (secrets stay in Vercel dashboard)
+
+# Cursor IDE — local plans, rules, agent notes; never commit or push
+.cursor/
+

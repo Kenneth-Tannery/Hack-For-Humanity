@@ -44,17 +44,17 @@ export function InfoCard({ label, tone, children, cite }) {
   )
 }
 
-export function Primary({ children, onClick, type = 'button', disabled }) {
+export function Primary({ children, onClick, type = 'button', disabled, ...rest }) {
   return (
-    <button type={type} className="btn btn-primary" onClick={onClick} disabled={disabled}>
+    <button type={type} className="btn btn-primary" onClick={onClick} disabled={disabled} {...rest}>
       {children}
     </button>
   )
 }
 
-export function Secondary({ children, onClick }) {
+export function Secondary({ children, onClick, disabled, ...rest }) {
   return (
-    <button type="button" className="btn btn-secondary" onClick={onClick}>
+    <button type="button" className="btn btn-secondary" onClick={onClick} disabled={disabled} {...rest}>
       {children}
     </button>
   )
@@ -80,6 +80,32 @@ export function Disclaimer() {
   return <p className="disclaimer">Not medical advice. Prototype only.</p>
 }
 
+export function VoiceDock({ muted, onMute, onRepeat, visible }) {
+  if (!visible) return null
+  return (
+    <div className="voice-dock" role="group" aria-label="Voice guide">
+      <button type="button" className="btn btn-secondary voice-dock-btn" onClick={onRepeat} disabled={muted}>
+        Repeat
+      </button>
+      <button type="button" className="btn btn-ghost voice-dock-btn" onClick={onMute} aria-pressed={muted}>
+        {muted ? 'Unmute' : 'Mute'}
+      </button>
+    </div>
+  )
+}
+
+export function SaveError({ message, onDismiss }) {
+  if (!message) return null
+  return (
+    <div className="save-error" role="alert">
+      <p>{message}</p>
+      <button type="button" className="save-error-dismiss" onClick={onDismiss}>
+        Dismiss
+      </button>
+    </div>
+  )
+}
+
 export function Foot({ children }) {
   return (
     <div className="screen-foot">
@@ -94,7 +120,12 @@ export function Screen({ children, variant, onClick, alert, calm }) {
   if (variant) classes.push(`is-${variant}`)
   if (calm) classes.push('is-calm')
   return (
-    <section className={classes.join(' ')} onClick={onClick} role={alert ? 'alert' : undefined}>
+    <section
+      className={classes.join(' ')}
+      onClick={onClick}
+      role={alert ? 'alert' : undefined}
+      aria-live={alert ? 'assertive' : undefined}
+    >
       {children}
     </section>
   )
