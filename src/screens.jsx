@@ -904,13 +904,18 @@ function ConnectCameraInner({
             ? 'Quick check before steady state (~3 sec after your pulse shows). Camera off again after.'
             : 'We lock ~3 sec after your pulse appears, then track your pace like a strap.'
 
-  const flashNote = torch.on
-    ? 'Flash on · lift finger when it locks'
-    : torch.mode === 'ambient'
-      ? 'No flash needed'
-      : torch.supported
-        ? 'Starting flash…'
-        : 'Flash unavailable in this browser'
+  const flashNote =
+    torch.mode === 'pulse'
+      ? torch.on
+        ? 'Flash on · rests ~½ sec every 4–5 sec'
+        : 'Flash resting…'
+      : torch.on
+        ? 'Flash on · lift finger when it locks'
+        : torch.mode === 'ambient'
+          ? 'No flash needed'
+          : torch.supported
+            ? 'Starting flash…'
+            : 'Flash unavailable in this browser'
 
   return (
     <Screen calm>

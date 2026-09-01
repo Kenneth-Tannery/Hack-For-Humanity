@@ -1,10 +1,9 @@
 /**
  * Fingertip camera PPG — same method as richrd/heart-rate-monitor (MIT).
  *
- * Flash/torch: browsers only expose on/off (no LED brightness). PPG needs a
- * steady light source — pulsing the LED would inject a fake ~3 Hz rhythm and
- * break BPM. We skip torch when ambient light is enough; otherwise torch stays
- * on continuously with minimum camera gain.
+ * Flash/torch: browsers only expose on/off (no brightness or true fade). On connect
+ * we pulse the LED — on ~4.5 s, off ~0.5 s — to reduce finger burn while keeping
+ * enough light for PPG. BPM sampling pauses briefly during the off phase.
  */
 
 const IMAGE_WIDTH = 30
@@ -15,8 +14,13 @@ const START_DELAY_MS = 1500
 const AMBIENT_TRIAL_MS = 900
 /** richrd good-range lower bound — below this needs fill light. */
 const DARK_THRESHOLD = 0.045
-/** Re-assert torch if Android drops it (does not pulse — that would break PPG). */
+/** Re-assert torch if Android drops it (continuous mode only). */
 const TORCH_KEEPALIVE_MS = 4000
+/** Pulse cycle on connect — on duration then brief off for heat relief. */
+export const TORCH_PULSE = {
+  onMs: 4500,
+  offMs: 500,
+}
 /** Safety cap — web torch ignores phone “flashlight brightness” settings and runs at full LED power. */
 const TORCH_MAX_MS = 12000
 
@@ -341,6 +345,7 @@ export function createFingertipMonitor({
   onSignalStart,
   torchMaxMs = 0,
   preferTorch = false,
+  torchPulse = preferTorch,
   preferEnvironment = true,
   startDelayMs = START_DELAY_MS,
 }) {
@@ -350,9 +355,10 @@ export function createFingertipMonitor({
   let raf = 0
   let startTimer = 0
   let torchTimer = 0
+  let torchPulseTimer = 0
   let torchLimitTimer = 0
   let torchOn = false
-  let torchMode = 'off' // 'off' | 'ambient' | 'continuous' | 'limit'
+  let torchMode = 'off' // 'off' | 'ambient' | 'continuous' | 'pulse' | 'limit'
   let torchSupported = false
   let signalStarted = false
   const samplingContext = samplingCanvas.getContext('2d', { willReadFrequently: true })
@@ -394,6 +400,18 @@ export function createFingertipMonitor({
     samples.push({ value, time: Date.now() })
     if (samples.length > MAX_SAMPLES) samples.shift()
     const dataStats = analyzeData(samples)
+
+    if (torchMode === 'pulse' && !torchOn) {
+      onStats?.({
+        ...dataStats,
+        bpm: null,
+        quality: { level: 'weak', label: 'Flash resting…' },
+        torchOn,
+      })
+      drawGraph(dataStats)
+      return
+    }
+
     const bpm = calculateBpm(dataStats.crossings)
     const rounded = bpm ? Math.round(bpm) : null
     const quality = signalQuality(dataStats)
@@ -457,14 +475,15 @@ export function createFingertipMonitor({
     // Connect screen: user expects flash for fingertip PPG — don’t skip torch based on
     // pre-finger room brightness (that was leaving the LED off after finger covers lens).
     if (preferTorch && torchSupported) {
-      torchMode = 'continuous'
+      torchMode = torchPulse ? 'pulse' : 'continuous'
       await setTorch(true)
       await softenCaptureKeepingTorch(track, true, { preferMin: true })
       await setTorch(true)
       emitTorch()
       startTorchLimitIfNeeded()
       loop()
-      startTorchKeepalive()
+      if (torchPulse) startTorchPulse()
+      else startTorchKeepalive()
       return
     }
 
@@ -496,17 +515,45 @@ export function createFingertipMonitor({
       return
     }
 
-    torchMode = 'continuous'
+    torchMode = torchPulse ? 'pulse' : 'continuous'
     await setTorch(true)
     await softenCaptureKeepingTorch(track, true, { preferMin: true })
     await setTorch(true)
     emitTorch()
     startTorchLimitIfNeeded()
     loop()
-    startTorchKeepalive()
+    if (torchPulse) startTorchPulse()
+    else startTorchKeepalive()
+  }
+
+  function stopTorchPulse() {
+    window.clearTimeout(torchPulseTimer)
+    torchPulseTimer = 0
+  }
+
+  function startTorchPulse() {
+    window.clearInterval(torchTimer)
+    stopTorchPulse()
+    if (!running || torchMode !== 'pulse') return
+
+    const runOnPhase = async () => {
+      if (!running || torchMode !== 'pulse') return
+      await setTorch(true)
+      torchPulseTimer = window.setTimeout(async () => {
+        if (!running || torchMode !== 'pulse') return
+        await setTorch(false)
+        emitTorch({ pulseRest: true })
+        torchPulseTimer = window.setTimeout(() => {
+          if (running && torchMode === 'pulse') runOnPhase()
+        }, TORCH_PULSE.offMs)
+      }, TORCH_PULSE.onMs)
+    }
+
+    runOnPhase()
   }
 
   function startTorchKeepalive() {
+    stopTorchPulse()
     window.clearInterval(torchTimer)
     torchTimer = window.setInterval(() => {
       if (running && torchMode === 'continuous') setTorch(true)
@@ -517,9 +564,10 @@ export function createFingertipMonitor({
     if (torchMaxMs <= 0) return
     window.clearTimeout(torchLimitTimer)
     torchLimitTimer = window.setTimeout(async () => {
-      if (!running || torchMode !== 'continuous') return
+      if (!running || (torchMode !== 'continuous' && torchMode !== 'pulse')) return
       await setTorch(false)
       torchMode = 'limit'
+      stopTorchPulse()
       window.clearInterval(torchTimer)
       emitTorch({ limited: true })
       onTorchLimit?.()
@@ -659,6 +707,7 @@ export function createFingertipMonitor({
     running = false
     window.clearTimeout(startTimer)
     window.clearTimeout(torchLimitTimer)
+    stopTorchPulse()
     window.clearInterval(torchTimer)
     window.cancelAnimationFrame(raf)
     await setTorch(false)
