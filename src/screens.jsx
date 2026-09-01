@@ -852,6 +852,7 @@ function ConnectCameraInner({
   const displayBpm = lock.locked ? lock.lockedBpm ?? bpm : bpm
   const progressPct = Math.round((lock.progress ?? 0) * 100)
   const noTorch = !error && !lock.locked && torch.supported === false
+  const readingHigh = !lock.locked && bpm != null && bpm > 115
 
   useEffect(() => {
     if (lock.locked) stop()
@@ -883,7 +884,9 @@ function ConnectCameraInner({
         ? 'Flash not available here'
         : lock.phase === 'unstable'
           ? 'Hold steadier'
-          : 'Cover camera + flash'
+          : readingHigh
+            ? 'Reading high — cover lens lightly'
+            : 'Cover camera + flash'
 
   const hint = lock.locked
     ? isResync
@@ -895,7 +898,9 @@ function ConnectCameraInner({
         ? 'Use Android Chrome with the rear camera, or connect a chest strap instead.'
         : lock.phase === 'measuring'
           ? 'Almost there — keep still a moment longer.'
-          : isResync
+          : readingHigh
+            ? 'Flash noise can read too high. Cover the lens gently — don’t press hard.'
+            : isResync
             ? 'Quick check before steady state (~3 sec). Camera off again after.'
             : 'We lock once here (~2 sec), then track your pace during the workout like a strap.'
 

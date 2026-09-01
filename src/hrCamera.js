@@ -65,11 +65,14 @@ function analyzeData(samples) {
 }
 
 function calculateBpm(crossings) {
-  if (crossings.length < 2) return null
+  if (crossings.length < 3) return null
   const averageInterval =
     (crossings[crossings.length - 1].time - crossings[0].time) / (crossings.length - 1)
   if (!averageInterval || averageInterval <= 0) return null
-  return 60000 / averageInterval
+  const bpm = 60000 / averageInterval
+  // Flash PWM / exposure flicker often reads >130 at rest — reject before UI/lock
+  if (bpm < 45 || bpm > 135) return null
+  return bpm
 }
 
 /** Map richrd’s “good range ~0.002–0.02” into UI labels. */
@@ -111,19 +114,14 @@ export const HR_LOCK = {
   /** Multi-sample soft lock. */
   softLockMs: 2200,
   /** UI: suggest lifting finger / try again. */
-  maxContactMs: 8000,
+  maxContactMs: 12000,
+  /** Contact timer starts after camera loop begins, not on mount. */
   holdMs: 400,
+  /** Resting connect — expected before exercise. */
+  restingMaxBpm: 120,
+  restingHardMaxBpm: 135,
 }
 
-function qualityOkForLock(quality, bpm) {
-  if (!isUsableBpm(bpm)) return false
-  const level = quality?.level
-  if (!level || level !== 'poor') return true
-  const label = quality?.label || ''
-  // Covered fingertip on flash reads bright — BPM still valid
-  if (label.includes('Too bright')) return true
-  return false
-}
 
 function median(values) {
   if (!values.length) return null
@@ -132,13 +130,65 @@ function median(values) {
   return sorted.length % 2 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2)
 }
 
+function robustMedian(values) {
+  if (!values.length) return null
+  if (values.length < 3) return median(values)
+  const m = median(values)
+  const trimmed = values.filter((v) => Math.abs(v - m) <= 28)
+  return median(trimmed.length ? trimmed : values)
+}
+
+/** Samples eligible for lock — filters flash noise and “too dark”. */
+export function isLockCandidateBpm(bpm, quality, range = 0) {
+  if (!isUsableBpm(bpm)) return false
+  const n = Number(bpm)
+  const level = quality?.level
+  const label = quality?.label || ''
+  if (level === 'poor' && label.includes('Too dark')) return false
+  if (n > HR_LOCK.restingHardMaxBpm) return false
+  if (n > HR_LOCK.restingMaxBpm) {
+    return level === 'good' || (level === 'ok' && range >= 0.002 && range <= 0.025)
+  }
+  return true
+}
+
+function lockEligible(samples, now = Date.now()) {
+  return samples.filter(
+    (s) =>
+      now - s.t <= HR_LOCK.windowMs &&
+      isLockCandidateBpm(s.bpm, s.quality, s.range ?? 0),
+  )
+}
+
+/** Last resort when contact timer fires but a resting-ish signal was visible. */
+export function evaluateForceLock(samples, now = Date.now()) {
+  const recent = samples.filter((s) => now - s.t <= HR_LOCK.windowMs && isUsableBpm(s.bpm))
+  if (!recent.length) {
+    return { phase: 'searching', locked: false, lockedBpm: null, progress: 0, spread: null }
+  }
+  const candidates = recent.filter((s) => isLockCandidateBpm(s.bpm, s.quality, s.range ?? 0))
+  const pool = candidates.length ? candidates : recent.filter((s) => s.bpm <= HR_LOCK.restingHardMaxBpm)
+  if (!pool.length) {
+    return { phase: 'searching', locked: false, lockedBpm: null, progress: 0, spread: null }
+  }
+  const bpms = pool.map((s) => s.bpm)
+  return {
+    phase: 'locked',
+    locked: true,
+    lockedBpm: robustMedian(bpms),
+    progress: 1,
+    spread: Math.max(...bpms) - Math.min(...bpms),
+    soft: true,
+    forced: true,
+  }
+}
+
 /**
  * Decide if the pulse reading is “locked in” like a wrist sensor.
  * @param {{ t: number, bpm: number, quality: { level: string } }[]} samples
  */
 export function evaluateHrLock(samples, now = Date.now()) {
-  const window = samples.filter((s) => now - s.t <= HR_LOCK.windowMs)
-  const usable = window.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality, s.bpm))
+  const usable = lockEligible(samples, now)
 
   if (!usable.length) {
     return { phase: 'searching', locked: false, lockedBpm: null, progress: 0, spread: null }
@@ -162,7 +212,7 @@ export function evaluateHrLock(samples, now = Date.now()) {
   return {
     phase: 'locked',
     locked: true,
-    lockedBpm: median(bpms),
+    lockedBpm: robustMedian(bpms),
     progress: 1,
     spread,
     soft: false,
@@ -174,19 +224,18 @@ export function evaluateHrLockWithSoft(samples, now = Date.now()) {
   const result = evaluateHrLock(samples, now)
   if (result.locked) return result
 
-  const usable = samples.filter((s) => isUsableBpm(s.bpm) && qualityOkForLock(s.quality, s.bpm))
+  const usable = lockEligible(samples, now)
   if (!usable.length) return result
 
   const elapsed = now - usable[0].t
   const latest = usable[usable.length - 1]
 
   if (elapsed >= HR_LOCK.emergencyLockMs) {
-    const recent = usable.filter((s) => now - s.t <= HR_LOCK.windowMs)
-    const bpms = recent.map((s) => s.bpm)
+    const bpms = usable.map((s) => s.bpm)
     return {
       phase: 'locked',
       locked: true,
-      lockedBpm: median(bpms) ?? latest.bpm,
+      lockedBpm: robustMedian(bpms) ?? latest.bpm,
       progress: 1,
       spread: bpms.length ? Math.max(...bpms) - Math.min(...bpms) : 0,
       soft: true,
@@ -196,14 +245,13 @@ export function evaluateHrLockWithSoft(samples, now = Date.now()) {
 
   if (usable.length < 2 || elapsed < HR_LOCK.softLockMs) return result
 
-  const recent = usable.filter((s) => now - s.t <= HR_LOCK.windowMs)
-  const bpms = recent.map((s) => s.bpm)
+  const bpms = usable.map((s) => s.bpm)
   if (!bpms.length) return result
 
   return {
     phase: 'locked',
     locked: true,
-    lockedBpm: median(bpms) ?? latest.bpm,
+    lockedBpm: robustMedian(bpms) ?? latest.bpm,
     progress: 1,
     spread: Math.max(...bpms) - Math.min(...bpms),
     soft: true,
@@ -305,6 +353,7 @@ export function createFingertipMonitor({
   onError,
   onTorch,
   onTorchLimit,
+  onSignalStart,
   torchMaxMs = 0,
   preferTorch = false,
   preferEnvironment = true,
@@ -320,6 +369,7 @@ export function createFingertipMonitor({
   let torchOn = false
   let torchMode = 'off' // 'off' | 'ambient' | 'continuous' | 'limit'
   let torchSupported = false
+  let signalStarted = false
   const samplingContext = samplingCanvas.getContext('2d', { willReadFrequently: true })
   const graphContext = graphCanvas ? graphCanvas.getContext('2d') : null
 
@@ -361,11 +411,16 @@ export function createFingertipMonitor({
     const dataStats = analyzeData(samples)
     const bpm = calculateBpm(dataStats.crossings)
     const rounded = bpm ? Math.round(bpm) : null
+    const quality = signalQuality(dataStats)
+    if (!signalStarted && (rounded || dataStats.range >= 0.0015)) {
+      signalStarted = true
+      onSignalStart?.()
+    }
     if (rounded && isUsableBpm(rounded)) onBpmChange?.(rounded)
     onStats?.({
       ...dataStats,
       bpm: rounded,
-      quality: signalQuality(dataStats),
+      quality,
       torchOn,
     })
     drawGraph(dataStats)
@@ -579,6 +634,7 @@ export function createFingertipMonitor({
   async function start() {
     if (running) return
     samples.length = 0
+    signalStarted = false
     onBpmChange?.(null)
     torchOn = false
 
