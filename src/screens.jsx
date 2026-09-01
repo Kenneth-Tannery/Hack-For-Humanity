@@ -814,6 +814,10 @@ export function ConnectBle({ go, setSource, selected, setSelected }) {
             <small>Last used 3 days ago</small>
           </button>
         </div>
+        <InfoCard label="Using the camera?" tone="in">
+          Remove your phone case if you use one — thick cases block the flash and make pulse
+          readings harder.
+        </InfoCard>
       </div>
       <Foot>
         <Primary
@@ -904,6 +908,11 @@ function ConnectCameraInner({
             ? 'Quick check before steady state (~3 sec after your pulse shows). Camera off again after.'
             : 'We lock ~3 sec after your pulse appears, then track your pace like a strap.'
 
+  const caseTip =
+    !lock.locked && !error && !timedOut
+      ? 'Tip: remove your phone case so the flash and lens sit flat on your finger.'
+      : ''
+
   const flashNote =
     torch.mode === 'pulse'
       ? torch.on
@@ -932,7 +941,7 @@ function ConnectCameraInner({
             ? 'Could not lock pulse in time. Try again or use a chest strap.'
             : lock.locked
               ? `Pulse locked at ${displayBpm} beats per minute. Continuing.`
-              : `${displayBpm ? `${displayBpm} beats per minute.` : 'Waiting for pulse.'} ${hint} ${flashNote}.`}
+              : `${displayBpm ? `${displayBpm} beats per minute.` : 'Waiting for pulse.'} ${caseTip} ${hint} ${flashNote}.`}
       </p>
       <div className="session-hero">
         <div className="cue">{cue}</div>
@@ -955,6 +964,11 @@ function ConnectCameraInner({
           </div>
         ) : null}
         <p className="hint">{error ? error : hint}</p>
+        {caseTip ? (
+          <p className="hr-hint" style={{ marginTop: 8 }}>
+            {caseTip}
+          </p>
+        ) : null}
         {!lock.locked && !error && !timedOut ? (
           <div className="hr-stage hr-stage-compact" aria-hidden="true">
             {nodes}

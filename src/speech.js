@@ -180,9 +180,9 @@ export function screenPrompt(screen, ctx = {}) {
     case 'connect-ble':
       return 'Connect a chest strap, or use the camera instead.'
     case 'connect-camera':
-      return 'Lock your pulse. Cover camera and flash. When a number appears, hold still about three seconds, then hands free.'
+      return 'Lock your pulse. Remove your phone case if you have one. Cover camera and flash. When a number appears, hold still about three seconds, then hands free.'
     case 'pulse-resync':
-      return 'Quick pulse check before steady state. Cover camera and flash briefly, then continue.'
+      return 'Quick pulse check. Remove your phone case if needed. Cover camera and flash briefly, then continue.'
     case 'warmup':
       return 'Warmup. Ease in gently. Skip to target when ready, or stop.'
     case 'active':
