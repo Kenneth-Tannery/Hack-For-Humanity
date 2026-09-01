@@ -7,13 +7,14 @@ import {
   isLockCandidateBpm,
   isUsableBpm,
   signalQuality,
+  smoothDisplayBpm,
 } from './hrCamera.js'
 
 const idleLock = () => evaluateHrLockWithSoft([], Date.now(), null)
-const LOCK_SAMPLE_MS = 160
+const LOCK_SAMPLE_MS = 200
 
 /**
- * Live fingertip PPG. Locks ~2.5 s after a BPM first appears on screen.
+ * Live fingertip PPG. Stable smoothed display; locks ~2.5 s after BPM first appears.
  */
 export function useFingertipHr({
   enabled,
@@ -28,6 +29,7 @@ export function useFingertipHr({
   const graphRef = useRef(null)
   const monitorRef = useRef(null)
   const lockSamplesRef = useRef([])
+  const displayHistoryRef = useRef([])
   const contactTimerRef = useRef(null)
   const firstBpmAtRef = useRef(null)
   const lastLockPushRef = useRef(0)
@@ -83,7 +85,6 @@ export function useFingertipHr({
     refreshLock(t)
   }
 
-  // Smooth progress bar between PPG samples (~2.5 s after first BPM)
   useEffect(() => {
     if (!enabled || !firstBpmAt || lock.locked || timedOut) return undefined
     const id = window.setInterval(() => refreshLock(), 100)
@@ -102,6 +103,7 @@ export function useFingertipHr({
         setQuality(signalQuality({ average: 0, range: 0 }))
         setTorch({ on: false, supported: false })
         lockSamplesRef.current = []
+        displayHistoryRef.current = []
         lastLockPushRef.current = 0
         firstBpmAtRef.current = null
         setLock(idleLock())
@@ -115,6 +117,7 @@ export function useFingertipHr({
 
     let cancelled = false
     lockSamplesRef.current = []
+    displayHistoryRef.current = []
     lastLockPushRef.current = 0
     firstBpmAtRef.current = null
     setFirstBpmAt(null)
@@ -130,23 +133,20 @@ export function useFingertipHr({
       preferTorch,
       torchMaxMs,
       startDelayMs: startDelayMs ?? (preferTorch ? 400 : undefined),
-      onBpmChange: (next) => {
-        if (!cancelled) setBpm(next)
-      },
       onStats: (stats) => {
         if (cancelled) return
         setQuality(stats.quality)
-        setBpm(stats.bpm ?? null)
-        if (isUsableBpm(stats.bpm)) {
-          noteFirstBpm(Date.now())
-        }
-        if (isUsableBpm(stats.bpm)) {
-          pushLockSample(stats.bpm, stats.quality, stats.range ?? 0)
+        const now = Date.now()
+        const display = smoothDisplayBpm(stats.bpm, displayHistoryRef.current, now)
+        setBpm(display)
+        if (isUsableBpm(display)) {
+          noteFirstBpm(now)
+          pushLockSample(display, stats.quality, stats.range ?? 0)
         } else if (firstBpmAtRef.current) {
-          refreshLock()
+          refreshLock(now)
         }
         if (
-          isLockCandidateBpm(stats.bpm, stats.quality, stats.range ?? 0) ||
+          isLockCandidateBpm(display, stats.quality, stats.range ?? 0) ||
           stats.quality.level === 'good' ||
           stats.quality.level === 'ok'
         ) {

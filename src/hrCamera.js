@@ -65,14 +65,27 @@ function analyzeData(samples) {
 }
 
 function calculateBpm(crossings) {
-  if (crossings.length < 3) return null
+  if (crossings.length < 2) return null
   const averageInterval =
     (crossings[crossings.length - 1].time - crossings[0].time) / (crossings.length - 1)
   if (!averageInterval || averageInterval <= 0) return null
-  const bpm = 60000 / averageInterval
-  // Flash PWM / exposure flicker often reads >130 at rest — reject before UI/lock
-  if (bpm < 45 || bpm > 135) return null
-  return bpm
+  return 60000 / averageInterval
+}
+
+/** Stable number for UI — median of recent raw readings, holds briefly through gaps. */
+export function smoothDisplayBpm(raw, history, now = Date.now()) {
+  const HOLD_MS = 900
+  const MAX_HISTORY = 12
+  if (isUsableBpm(raw)) {
+    history.push({ bpm: raw, t: now })
+    while (history.length > MAX_HISTORY) history.shift()
+  }
+  const recent = history.filter((s) => now - s.t <= 2500).map((s) => s.bpm)
+  if (recent.length >= 2) return median(recent)
+  if (recent.length === 1) return recent[0]
+  const last = history[history.length - 1]
+  if (last && now - last.t <= HOLD_MS) return last.bpm
+  return null
 }
 
 /** Map richrd’s “good range ~0.002–0.02” into UI labels. */
@@ -144,7 +157,7 @@ export function isLockCandidateBpm(bpm, quality, range = 0) {
   if (level === 'poor' && label.includes('Too dark')) return false
   if (n > HR_LOCK.restingHardMaxBpm) return false
   if (n > HR_LOCK.restingMaxBpm) {
-    return level === 'good' || (level === 'ok' && range >= 0.002 && range <= 0.025)
+    return level === 'good' || level === 'ok' || level === 'noisy'
   }
   return true
 }
