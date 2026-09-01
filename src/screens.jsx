@@ -901,8 +901,8 @@ function ConnectCameraInner({
           : readingHigh
             ? 'Flash noise can read too high. Cover the lens gently — don’t press hard.'
             : isResync
-            ? 'Quick check before steady state (~3 sec). Camera off again after.'
-            : 'We lock once here (~2 sec), then track your pace during the workout like a strap.'
+            ? 'Quick check before steady state (~3 sec after your pulse shows). Camera off again after.'
+            : 'We lock ~3 sec after your pulse appears, then track your pace like a strap.'
 
   const flashNote = torch.on
     ? 'Flash on · lift finger when it locks'

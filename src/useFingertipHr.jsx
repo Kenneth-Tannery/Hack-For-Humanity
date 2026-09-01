@@ -9,11 +9,11 @@ import {
   signalQuality,
 } from './hrCamera.js'
 
-const idleLock = () => evaluateHrLockWithSoft([])
+const idleLock = () => evaluateHrLockWithSoft([], Date.now(), null)
 const LOCK_SAMPLE_MS = 160
 
 /**
- * Live fingertip PPG. Watch-style lock when BPM is stable for a few seconds.
+ * Live fingertip PPG. Locks ~2.5 s after a BPM first appears on screen.
  */
 export function useFingertipHr({
   enabled,
@@ -29,9 +29,10 @@ export function useFingertipHr({
   const monitorRef = useRef(null)
   const lockSamplesRef = useRef([])
   const contactTimerRef = useRef(null)
-  const signalArmedRef = useRef(false)
+  const firstBpmAtRef = useRef(null)
   const lastLockPushRef = useRef(0)
   const [bpm, setBpm] = useState(null)
+  const [firstBpmAt, setFirstBpmAt] = useState(null)
   const [quality, setQuality] = useState(() => signalQuality({ average: 0, range: 0 }))
   const [error, setError] = useState(null)
   const [ready, setReady] = useState(false)
@@ -47,9 +48,29 @@ export function useFingertipHr({
     contactTimerRef.current = null
   }, [])
 
+  function refreshLock(now = Date.now()) {
+    setLock(evaluateHrLockWithSoft(lockSamplesRef.current, now, firstBpmAtRef.current))
+  }
+
   useEffect(() => {
     setHostReady(Boolean(videoRef.current && sampleRef.current))
   })
+
+  function noteFirstBpm(t) {
+    if (firstBpmAtRef.current) return
+    firstBpmAtRef.current = t
+    setFirstBpmAt(t)
+    window.clearTimeout(contactTimerRef.current)
+    contactTimerRef.current = window.setTimeout(() => {
+      const forced = evaluateForceLock(lockSamplesRef.current, Date.now())
+      if (forced.locked) {
+        setLock(forced)
+        return
+      }
+      setTimedOut(true)
+      stop()
+    }, HR_LOCK.maxContactMs)
+  }
 
   function pushLockSample(nextBpm, nextQuality, range) {
     if (!trackLock || !isLockCandidateBpm(nextBpm, nextQuality, range)) return
@@ -59,14 +80,22 @@ export function useFingertipHr({
     lockSamplesRef.current.push({ t, bpm: nextBpm, quality: nextQuality, range })
     const cutoff = t - 10000
     lockSamplesRef.current = lockSamplesRef.current.filter((s) => s.t >= cutoff)
-    setLock(evaluateHrLockWithSoft(lockSamplesRef.current, t))
+    refreshLock(t)
   }
+
+  // Smooth progress bar between PPG samples (~2.5 s after first BPM)
+  useEffect(() => {
+    if (!enabled || !firstBpmAt || lock.locked || timedOut) return undefined
+    const id = window.setInterval(() => refreshLock(), 100)
+    return () => window.clearInterval(id)
+  }, [enabled, firstBpmAt, lock.locked, timedOut])
 
   useEffect(() => {
     if (!enabled || !hostReady) {
       stop()
       if (!enabled) {
         setBpm(null)
+        setFirstBpmAt(null)
         setReady(false)
         setError(null)
         setTimedOut(false)
@@ -74,7 +103,7 @@ export function useFingertipHr({
         setTorch({ on: false, supported: false })
         lockSamplesRef.current = []
         lastLockPushRef.current = 0
-        signalArmedRef.current = false
+        firstBpmAtRef.current = null
         setLock(idleLock())
       }
       return undefined
@@ -87,27 +116,10 @@ export function useFingertipHr({
     let cancelled = false
     lockSamplesRef.current = []
     lastLockPushRef.current = 0
-    signalArmedRef.current = false
+    firstBpmAtRef.current = null
+    setFirstBpmAt(null)
     setTimedOut(false)
     setLock(idleLock())
-
-    function finishContactWindow() {
-      if (cancelled) return
-      const forced = evaluateForceLock(lockSamplesRef.current)
-      if (forced.locked) {
-        setLock(forced)
-        return
-      }
-      setTimedOut(true)
-      stop()
-    }
-
-    function armContactTimer() {
-      if (signalArmedRef.current || cancelled) return
-      signalArmedRef.current = true
-      window.clearTimeout(contactTimerRef.current)
-      contactTimerRef.current = window.setTimeout(finishContactWindow, HR_LOCK.maxContactMs)
-    }
 
     const monitor = createFingertipMonitor({
       videoElement: video,
@@ -118,7 +130,6 @@ export function useFingertipHr({
       preferTorch,
       torchMaxMs,
       startDelayMs: startDelayMs ?? (preferTorch ? 400 : undefined),
-      onSignalStart: armContactTimer,
       onBpmChange: (next) => {
         if (!cancelled) setBpm(next)
       },
@@ -127,7 +138,12 @@ export function useFingertipHr({
         setQuality(stats.quality)
         setBpm(stats.bpm ?? null)
         if (isUsableBpm(stats.bpm)) {
+          noteFirstBpm(Date.now())
+        }
+        if (isUsableBpm(stats.bpm)) {
           pushLockSample(stats.bpm, stats.quality, stats.range ?? 0)
+        } else if (firstBpmAtRef.current) {
+          refreshLock()
         }
         if (
           isLockCandidateBpm(stats.bpm, stats.quality, stats.range ?? 0) ||

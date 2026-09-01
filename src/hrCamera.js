@@ -105,17 +105,14 @@ export function isUsableBpm(bpm) {
 
 /** Watch-style lock — tuned for short fingertip contact (flash heat). */
 export const HR_LOCK = {
-  windowMs: 3000,
+  windowMs: 4000,
   maxSpread: 32,
   minSamples: 2,
   excludeQuality: ['poor'],
-  /** Accept a single steady reading after this long (flash heat). */
-  emergencyLockMs: 1600,
-  /** Multi-sample soft lock. */
-  softLockMs: 2200,
-  /** UI: suggest lifting finger / try again. */
+  /** Lock this long after the UI first shows a BPM (2–3 sec window). */
+  lockAfterBpmMs: 2500,
+  /** UI: max wait after first BPM before try again. */
   maxContactMs: 12000,
-  /** Contact timer starts after camera loop begins, not on mount. */
   holdMs: 400,
   /** Resting connect — expected before exercise. */
   restingMaxBpm: 120,
@@ -184,29 +181,38 @@ export function evaluateForceLock(samples, now = Date.now()) {
 }
 
 /**
- * Decide if the pulse reading is “locked in” like a wrist sensor.
- * @param {{ t: number, bpm: number, quality: { level: string } }[]} samples
+ * Lock once a BPM has been visible for lockAfterBpmMs (~2.5 s).
+ * @param {number | null} firstBpmAt — when any BPM first appeared on screen
  */
-export function evaluateHrLock(samples, now = Date.now()) {
-  const usable = lockEligible(samples, now)
-
-  if (!usable.length) {
+export function evaluateHrLock(samples, now = Date.now(), firstBpmAt = null) {
+  if (!firstBpmAt) {
     return { phase: 'searching', locked: false, lockedBpm: null, progress: 0, spread: null }
   }
 
-  const elapsed = now - usable[0].t
-  const sampleProgress = Math.min(1, usable.length / HR_LOCK.minSamples)
-  const timeProgress = Math.min(1, elapsed / HR_LOCK.emergencyLockMs)
-  const progress = Math.max(sampleProgress, timeProgress)
+  const elapsed = now - firstBpmAt
+  const progress = Math.min(1, elapsed / HR_LOCK.lockAfterBpmMs)
+  const usable = lockEligible(samples, now)
+
+  if (!usable.length) {
+    return { phase: 'measuring', locked: false, lockedBpm: null, progress, spread: null }
+  }
+
   const bpms = usable.map((s) => s.bpm)
   const spread = Math.max(...bpms) - Math.min(...bpms)
 
-  if (usable.length < HR_LOCK.minSamples) {
+  if (elapsed < HR_LOCK.lockAfterBpmMs) {
     return { phase: 'measuring', locked: false, lockedBpm: null, progress, spread }
   }
 
-  if (spread > HR_LOCK.maxSpread) {
-    return { phase: 'unstable', locked: false, lockedBpm: null, progress, spread }
+  if (usable.length >= HR_LOCK.minSamples && spread <= HR_LOCK.maxSpread) {
+    return {
+      phase: 'locked',
+      locked: true,
+      lockedBpm: robustMedian(bpms),
+      progress: 1,
+      spread,
+      soft: false,
+    }
   }
 
   return {
@@ -215,48 +221,14 @@ export function evaluateHrLock(samples, now = Date.now()) {
     lockedBpm: robustMedian(bpms),
     progress: 1,
     spread,
-    soft: false,
+    soft: true,
+    timed: true,
   }
 }
 
-/** Soft / emergency lock so users aren’t stuck on a hot flash. */
-export function evaluateHrLockWithSoft(samples, now = Date.now()) {
-  const result = evaluateHrLock(samples, now)
-  if (result.locked) return result
-
-  const usable = lockEligible(samples, now)
-  if (!usable.length) return result
-
-  const elapsed = now - usable[0].t
-  const latest = usable[usable.length - 1]
-
-  if (elapsed >= HR_LOCK.emergencyLockMs) {
-    const bpms = usable.map((s) => s.bpm)
-    return {
-      phase: 'locked',
-      locked: true,
-      lockedBpm: robustMedian(bpms) ?? latest.bpm,
-      progress: 1,
-      spread: bpms.length ? Math.max(...bpms) - Math.min(...bpms) : 0,
-      soft: true,
-      emergency: true,
-    }
-  }
-
-  if (usable.length < 2 || elapsed < HR_LOCK.softLockMs) return result
-
-  const bpms = usable.map((s) => s.bpm)
-  if (!bpms.length) return result
-
-  return {
-    phase: 'locked',
-    locked: true,
-    lockedBpm: robustMedian(bpms) ?? latest.bpm,
-    progress: 1,
-    spread: Math.max(...bpms) - Math.min(...bpms),
-    soft: true,
-    emergency: false,
-  }
+/** @deprecated alias — use evaluateHrLock with firstBpmAt */
+export function evaluateHrLockWithSoft(samples, now = Date.now(), firstBpmAt = null) {
+  return evaluateHrLock(samples, now, firstBpmAt)
 }
 
 function pickTrack(stream) {
