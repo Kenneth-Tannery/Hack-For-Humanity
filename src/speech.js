@@ -1,3 +1,5 @@
+import { clipUrl, screenClipId } from './voiceClips.js'
+
 const AUDIO_KEY = 'threshold-audio-checkin'
 const VOICE_GUIDE_KEY = 'threshold-voice-guide'
 
@@ -22,6 +24,9 @@ let engine = null
 let cachedVoice = null
 let voicesReady = false
 let lastSpoken = ''
+/** @type {HTMLAudioElement | null} */
+let currentAudio = null
+let clipsAvailable = false
 
 function scoreVoice(voice) {
   const name = `${voice.name} ${voice.lang}`
@@ -54,6 +59,31 @@ function ensureVoices(synth) {
   return cachedVoice
 }
 
+function cancelAudio() {
+  if (!currentAudio) return
+  currentAudio.pause()
+  currentAudio.currentTime = 0
+  currentAudio = null
+}
+
+async function playClipUrl(url) {
+  cancelAudio()
+  getEngine().cancel()
+  await new Promise((resolve, reject) => {
+    const audio = new Audio(url)
+    currentAudio = audio
+    audio.onended = () => {
+      currentAudio = null
+      resolve(undefined)
+    }
+    audio.onerror = () => {
+      currentAudio = null
+      reject(new Error('clip playback failed'))
+    }
+    audio.play().catch(reject)
+  })
+}
+
 function browserEngine() {
   const synth = typeof window !== 'undefined' ? window.speechSynthesis : null
   if (synth && typeof synth.addEventListener === 'function') {
@@ -69,9 +99,9 @@ function browserEngine() {
     },
     speak(text) {
       if (!synth || !text) return
+      cancelAudio()
       synth.cancel()
       const utter = new window.SpeechSynthesisUtterance(String(text))
-      // Softer, slower delivery for concussion-friendly listening
       utter.rate = 0.86
       utter.pitch = 0.9
       utter.volume = 0.85
@@ -96,20 +126,50 @@ function getEngine() {
 export function setSpeechEngine(next) {
   engine = next
   lastSpoken = ''
+  cancelAudio()
+}
+
+/** Call once at startup after Kokoro MP3s may be present. */
+export function markVoiceClipsAvailable(on = true) {
+  clipsAvailable = Boolean(on)
 }
 
 export function canSpeak() {
-  return getEngine().canSpeak()
+  return clipsAvailable || getEngine().canSpeak()
 }
 
-export function speak(text) {
+export function speak(text, options = {}) {
   const trimmed = String(text || '').trim()
   if (!trimmed) return
   lastSpoken = trimmed
+  const clipId = options.clipId
+  if (clipId && typeof window !== 'undefined') {
+    clipUrl(clipId)
+      .then((url) => {
+        if (!url) {
+          getEngine().speak(trimmed)
+          return undefined
+        }
+        return playClipUrl(url).catch(() => {
+          getEngine().speak(trimmed)
+        })
+      })
+      .catch(() => {
+        getEngine().speak(trimmed)
+      })
+    return
+  }
   getEngine().speak(trimmed)
 }
 
+export function speakScreen(screen, ctx = {}) {
+  const prompt = screenPrompt(screen, ctx)
+  const clipId = screenClipId(screen, ctx)
+  speak(prompt, { clipId })
+}
+
 export function cancelSpeak() {
+  cancelAudio()
   getEngine().cancel()
 }
 
@@ -254,7 +314,6 @@ export const VOICE_SCREENS = [
   'settings',
   'clinician-log',
 ]
-
 
 export function readAudioPreference() {
   if (typeof localStorage === 'undefined') return canSpeak()

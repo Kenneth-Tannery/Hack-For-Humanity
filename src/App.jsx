@@ -33,14 +33,15 @@ import {
 import {
   canSpeak,
   cancelSpeak,
+  markVoiceClipsAvailable,
   readAudioPreference,
   readVoiceGuidePreference,
   repeatLast,
-  screenPrompt,
-  speak,
+  speakScreen,
   writeAudioPreference,
   writeVoiceGuidePreference,
 } from './speech.js'
+import { clipUrl, warmVoiceClips } from './voiceClips.js'
 import { VoiceDock, SaveError } from './ui.jsx'
 
 const e2eMode =
@@ -117,6 +118,21 @@ export default function App() {
     document.documentElement.dataset.theme = theme
     localStorage.setItem(THEME_KEY, theme)
   }, [theme])
+
+  useEffect(() => {
+    warmVoiceClips()
+      .then(() => clipUrl('splash'))
+      .then(async (url) => {
+        if (!url) return
+        try {
+          const res = await fetch(url, { method: 'HEAD' })
+          markVoiceClipsAvailable(res.ok)
+        } catch {
+          markVoiceClipsAvailable(false)
+        }
+      })
+      .catch(() => markVoiceClipsAvailable(false))
+  }, [])
 
   useEffect(() => {
     if (screen === 'injury' && !profileId) {
@@ -211,7 +227,7 @@ export default function App() {
     if (checkinVoice) return undefined
 
     if (guideHere && (screenChanged || riskTurn || guideJustOn)) {
-      const prompt = screenPrompt(screen, {
+      speakScreen(screen, {
         day: dayNumber(injuryDate),
         level: heldEval?.nextLevel ?? heldEval?.levelAfter ?? level,
         overall,
@@ -226,7 +242,6 @@ export default function App() {
         level5StableStreak: heldEval?.level5StableStreak ?? level5StableStreak,
         graduated: heldEval?.graduated,
       })
-      if (prompt) speak(prompt)
     } else if (!voiceGuide && !checkinVoice) {
       cancelSpeak()
     }

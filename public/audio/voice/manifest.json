@@ -1,0 +1,326 @@
+{
+  "engine": "kokoro",
+  "recommendedVoice": "af_heart",
+  "recommendedSpeed": 0.92,
+  "sourceUrl": "https://offlinetts.com/app/",
+  "voiceLibraryUrl": "https://offlinetts.com/voice/",
+  "generatedAt": "2026-09-02T02:16:43.546Z",
+  "clipCount": 63,
+  "clips": [
+    {
+      "id": "splash",
+      "text": "Threshold. Paced recovery after concussion. Tap to continue.",
+      "file": "splash.mp3"
+    },
+    {
+      "id": "disclaimer",
+      "text": "Read this first. This paces exercise and keeps a log. It does not diagnose or clear return to sport. Tap I understand.",
+      "file": "disclaimer.mp3"
+    },
+    {
+      "id": "injury",
+      "text": "When did the injury happen? Enter the date and your age, then continue.",
+      "file": "injury.mp3"
+    },
+    {
+      "id": "risk-consent",
+      "text": "Optional questions about you. Answer to set expectations, or skip.",
+      "file": "risk-consent.mp3"
+    },
+    {
+      "id": "outlook",
+      "text": "Your outlook. This is not a diagnosis. Tap Start when ready.",
+      "file": "outlook.mp3"
+    },
+    {
+      "id": "checkin",
+      "text": "Daily check-in. Start with audio, or without.",
+      "file": "checkin.mp3"
+    },
+    {
+      "id": "checkin-pending",
+      "text": "Log symptoms first. A session needs today’s rating. Start with audio, or without.",
+      "file": "checkin-pending.mp3"
+    },
+    {
+      "id": "overall",
+      "text": "Overall. Zero is fine. Ten is worst. Choose, then save.",
+      "file": "overall.mp3"
+    },
+    {
+      "id": "red-flags",
+      "text": "Before you start. Any red flags right now? None of these, or one or more apply.",
+      "file": "red-flags.mp3"
+    },
+    {
+      "id": "emergency",
+      "text": "Stop. Do not exercise. Get medical help now. Call emergency services. Or say you’ve got help to go back.",
+      "file": "emergency.mp3"
+    },
+    {
+      "id": "not-today",
+      "text": "Not today. Symptoms 8 out of 10. Above the safe level for exercise. Log symptoms instead, or go back.",
+      "file": "not-today.mp3"
+    },
+    {
+      "id": "preflight",
+      "text": "Before you start. Right now 3 out of 10. Target 120 to 140. Start warmup when ready.",
+      "file": "preflight.mp3"
+    },
+    {
+      "id": "connect-ble",
+      "text": "Connect a chest strap, or use the camera instead.",
+      "file": "connect-ble.mp3"
+    },
+    {
+      "id": "connect-camera",
+      "text": "Lock your pulse. Remove your phone case if you have one. Cover camera and flash. When a number appears, hold still about three seconds, then hands free.",
+      "file": "connect-camera.mp3"
+    },
+    {
+      "id": "pulse-resync",
+      "text": "Quick pulse check. Remove your phone case if needed. Cover camera and flash briefly, then continue.",
+      "file": "pulse-resync.mp3"
+    },
+    {
+      "id": "warmup",
+      "text": "Warmup. Ease in gently. Skip to target when ready, or stop.",
+      "file": "warmup.mp3"
+    },
+    {
+      "id": "active",
+      "text": "Steady state. Target 120 to 140. Hold here. Dim the screen, or stop.",
+      "file": "active.mp3"
+    },
+    {
+      "id": "glance",
+      "text": "Glance mode. Heart rate on screen. Tap to return.",
+      "file": "glance.mp3"
+    },
+    {
+      "id": "after",
+      "text": "After session. How do you feel now? Choose a rating, then save.",
+      "file": "after.mp3"
+    },
+    {
+      "id": "hour",
+      "text": "One hour later. How do you feel now? Choose a rating on the same scale.",
+      "file": "hour.mp3"
+    },
+    {
+      "id": "settings",
+      "text": "Settings. Voice guide and theme. Open recovery log for your clinician. Back when done.",
+      "file": "settings.mp3"
+    },
+    {
+      "id": "clinician-log",
+      "text": "Recovery log. Timeline of check-ins and sessions for your clinician. Not medical advice.",
+      "file": "clinician-log.mp3"
+    },
+    {
+      "id": "home-not-logged",
+      "text": "Today. Day 1. Level 2. Log symptoms before you start a session.",
+      "file": "home-not-logged.mp3"
+    },
+    {
+      "id": "home-logged",
+      "text": "Today. Day 1. Level 2. Symptoms logged. Start session, or log again.",
+      "file": "home-logged.mp3"
+    },
+    {
+      "id": "home-maintenance",
+      "text": "Maintenance mode. Day 10. Log symptoms today. No prescribed exercise.",
+      "file": "home-maintenance.mp3"
+    },
+    {
+      "id": "home-maintenance-logged",
+      "text": "Maintenance mode. Day 10. Symptoms logged. Log again anytime.",
+      "file": "home-maintenance-logged.mp3"
+    },
+    {
+      "id": "held-level-up",
+      "text": "Moving up to level 3. Symptoms stayed inside the rule. See you tomorrow.",
+      "file": "held-level-up.mp3"
+    },
+    {
+      "id": "held-stay",
+      "text": "Staying at level 3. Try again tomorrow.",
+      "file": "held-stay.mp3"
+    },
+    {
+      "id": "held-level-5",
+      "text": "Level 5. Stable session 1 of 3. See you tomorrow.",
+      "file": "held-level-5.mp3"
+    },
+    {
+      "id": "held-level-5-streak",
+      "text": "Level 5. Stable session 2 of 3. See you tomorrow.",
+      "file": "held-level-5-streak.mp3"
+    },
+    {
+      "id": "held-graduated",
+      "text": "Progression complete. Three stable Level 5 sessions done. Maintenance mode starts tomorrow. Symptom check-in only.",
+      "file": "held-graduated.mp3"
+    },
+    {
+      "id": "symptom-headache",
+      "text": "Headache. Zero to six.",
+      "file": "symptom-headache.mp3"
+    },
+    {
+      "id": "symptom-pressure-in-the-head",
+      "text": "Pressure in the head. Zero to six.",
+      "file": "symptom-pressure-in-the-head.mp3"
+    },
+    {
+      "id": "symptom-neck-pain",
+      "text": "Neck pain. Zero to six.",
+      "file": "symptom-neck-pain.mp3"
+    },
+    {
+      "id": "symptom-nausea-or-vomiting",
+      "text": "Nausea or vomiting. Zero to six.",
+      "file": "symptom-nausea-or-vomiting.mp3"
+    },
+    {
+      "id": "symptom-dizziness",
+      "text": "Dizziness. Zero to six.",
+      "file": "symptom-dizziness.mp3"
+    },
+    {
+      "id": "symptom-blurred-vision",
+      "text": "Blurred vision. Zero to six.",
+      "file": "symptom-blurred-vision.mp3"
+    },
+    {
+      "id": "symptom-balance-problems",
+      "text": "Balance problems. Zero to six.",
+      "file": "symptom-balance-problems.mp3"
+    },
+    {
+      "id": "symptom-sensitivity-to-light",
+      "text": "Sensitivity to light. Zero to six.",
+      "file": "symptom-sensitivity-to-light.mp3"
+    },
+    {
+      "id": "symptom-sensitivity-to-noise",
+      "text": "Sensitivity to noise. Zero to six.",
+      "file": "symptom-sensitivity-to-noise.mp3"
+    },
+    {
+      "id": "symptom-feeling-slowed-down",
+      "text": "Feeling slowed down. Zero to six.",
+      "file": "symptom-feeling-slowed-down.mp3"
+    },
+    {
+      "id": "symptom-feeling-like-in-a-fog",
+      "text": "Feeling like “in a fog”. Zero to six.",
+      "file": "symptom-feeling-like-in-a-fog.mp3"
+    },
+    {
+      "id": "symptom-don-t-feel-right",
+      "text": "“Don’t feel right”. Zero to six.",
+      "file": "symptom-don-t-feel-right.mp3"
+    },
+    {
+      "id": "symptom-difficulty-concentrating",
+      "text": "Difficulty concentrating. Zero to six.",
+      "file": "symptom-difficulty-concentrating.mp3"
+    },
+    {
+      "id": "symptom-difficulty-remembering",
+      "text": "Difficulty remembering. Zero to six.",
+      "file": "symptom-difficulty-remembering.mp3"
+    },
+    {
+      "id": "symptom-fatigue-or-low-energy",
+      "text": "Fatigue or low energy. Zero to six.",
+      "file": "symptom-fatigue-or-low-energy.mp3"
+    },
+    {
+      "id": "symptom-confusion",
+      "text": "Confusion. Zero to six.",
+      "file": "symptom-confusion.mp3"
+    },
+    {
+      "id": "symptom-drowsiness",
+      "text": "Drowsiness. Zero to six.",
+      "file": "symptom-drowsiness.mp3"
+    },
+    {
+      "id": "symptom-more-emotional",
+      "text": "More emotional. Zero to six.",
+      "file": "symptom-more-emotional.mp3"
+    },
+    {
+      "id": "symptom-irritability",
+      "text": "Irritability. Zero to six.",
+      "file": "symptom-irritability.mp3"
+    },
+    {
+      "id": "symptom-sadness",
+      "text": "Sadness. Zero to six.",
+      "file": "symptom-sadness.mp3"
+    },
+    {
+      "id": "symptom-nervous-or-anxious",
+      "text": "Nervous or anxious. Zero to six.",
+      "file": "symptom-nervous-or-anxious.mp3"
+    },
+    {
+      "id": "symptom-trouble-falling-asleep",
+      "text": "Trouble falling asleep. Zero to six.",
+      "file": "symptom-trouble-falling-asleep.mp3"
+    },
+    {
+      "id": "overall",
+      "text": "Overall. Zero is fine. Ten is worst. Choose, then save.",
+      "file": "overall.mp3"
+    },
+    {
+      "id": "risk-prior",
+      "text": "Have you had a concussion before? Yes, no, or skip if shown.",
+      "file": "risk-prior.mp3"
+    },
+    {
+      "id": "risk-migraine",
+      "text": "Do you get migraines? Yes, no, or skip if shown.",
+      "file": "risk-migraine.mp3"
+    },
+    {
+      "id": "risk-adhd",
+      "text": "Have you been diagnosed with ADHD or a learning difference? Yes, no, or skip if shown.",
+      "file": "risk-adhd.mp3"
+    },
+    {
+      "id": "risk-anxiety",
+      "text": "Have you had anxiety or depression that needed treatment? Yes, no, or skip if shown.",
+      "file": "risk-anxiety.mp3"
+    },
+    {
+      "id": "risk-loc",
+      "text": "Did you lose consciousness? Yes, no, or skip if shown.",
+      "file": "risk-loc.mp3"
+    },
+    {
+      "id": "risk-amnesia",
+      "text": "Any gap in memory around the injury? Yes, no, or skip if shown.",
+      "file": "risk-amnesia.mp3"
+    },
+    {
+      "id": "risk-repeat",
+      "text": "Is this your second concussion in 12 months? Yes, no, or skip if shown.",
+      "file": "risk-repeat.mp3"
+    },
+    {
+      "id": "risk-sport",
+      "text": "Did this happen in contact sport? Yes, no, or skip if shown.",
+      "file": "risk-sport.mp3"
+    },
+    {
+      "id": "risk-worse",
+      "text": "Are symptoms worse than last time, if you’ve had one before? Yes, no, or skip if shown.",
+      "file": "risk-worse.mp3"
+    }
+  ]
+}

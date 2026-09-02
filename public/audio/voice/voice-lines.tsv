@@ -1,0 +1,64 @@
+id	text	file
+splash	Threshold. Paced recovery after concussion. Tap to continue.	splash.mp3
+disclaimer	Read this first. This paces exercise and keeps a log. It does not diagnose or clear return to sport. Tap I understand.	disclaimer.mp3
+injury	When did the injury happen? Enter the date and your age, then continue.	injury.mp3
+risk-consent	Optional questions about you. Answer to set expectations, or skip.	risk-consent.mp3
+outlook	Your outlook. This is not a diagnosis. Tap Start when ready.	outlook.mp3
+checkin	Daily check-in. Start with audio, or without.	checkin.mp3
+checkin-pending	Log symptoms first. A session needs today’s rating. Start with audio, or without.	checkin-pending.mp3
+overall	Overall. Zero is fine. Ten is worst. Choose, then save.	overall.mp3
+red-flags	Before you start. Any red flags right now? None of these, or one or more apply.	red-flags.mp3
+emergency	Stop. Do not exercise. Get medical help now. Call emergency services. Or say you’ve got help to go back.	emergency.mp3
+not-today	Not today. Symptoms 8 out of 10. Above the safe level for exercise. Log symptoms instead, or go back.	not-today.mp3
+preflight	Before you start. Right now 3 out of 10. Target 120 to 140. Start warmup when ready.	preflight.mp3
+connect-ble	Connect a chest strap, or use the camera instead.	connect-ble.mp3
+connect-camera	Lock your pulse. Remove your phone case if you have one. Cover camera and flash. When a number appears, hold still about three seconds, then hands free.	connect-camera.mp3
+pulse-resync	Quick pulse check. Remove your phone case if needed. Cover camera and flash briefly, then continue.	pulse-resync.mp3
+warmup	Warmup. Ease in gently. Skip to target when ready, or stop.	warmup.mp3
+active	Steady state. Target 120 to 140. Hold here. Dim the screen, or stop.	active.mp3
+glance	Glance mode. Heart rate on screen. Tap to return.	glance.mp3
+after	After session. How do you feel now? Choose a rating, then save.	after.mp3
+hour	One hour later. How do you feel now? Choose a rating on the same scale.	hour.mp3
+settings	Settings. Voice guide and theme. Open recovery log for your clinician. Back when done.	settings.mp3
+clinician-log	Recovery log. Timeline of check-ins and sessions for your clinician. Not medical advice.	clinician-log.mp3
+home-not-logged	Today. Day 1. Level 2. Log symptoms before you start a session.	home-not-logged.mp3
+home-logged	Today. Day 1. Level 2. Symptoms logged. Start session, or log again.	home-logged.mp3
+home-maintenance	Maintenance mode. Day 10. Log symptoms today. No prescribed exercise.	home-maintenance.mp3
+home-maintenance-logged	Maintenance mode. Day 10. Symptoms logged. Log again anytime.	home-maintenance-logged.mp3
+held-level-up	Moving up to level 3. Symptoms stayed inside the rule. See you tomorrow.	held-level-up.mp3
+held-stay	Staying at level 3. Try again tomorrow.	held-stay.mp3
+held-level-5	Level 5. Stable session 1 of 3. See you tomorrow.	held-level-5.mp3
+held-level-5-streak	Level 5. Stable session 2 of 3. See you tomorrow.	held-level-5-streak.mp3
+held-graduated	Progression complete. Three stable Level 5 sessions done. Maintenance mode starts tomorrow. Symptom check-in only.	held-graduated.mp3
+symptom-headache	Headache. Zero to six.	symptom-headache.mp3
+symptom-pressure-in-the-head	Pressure in the head. Zero to six.	symptom-pressure-in-the-head.mp3
+symptom-neck-pain	Neck pain. Zero to six.	symptom-neck-pain.mp3
+symptom-nausea-or-vomiting	Nausea or vomiting. Zero to six.	symptom-nausea-or-vomiting.mp3
+symptom-dizziness	Dizziness. Zero to six.	symptom-dizziness.mp3
+symptom-blurred-vision	Blurred vision. Zero to six.	symptom-blurred-vision.mp3
+symptom-balance-problems	Balance problems. Zero to six.	symptom-balance-problems.mp3
+symptom-sensitivity-to-light	Sensitivity to light. Zero to six.	symptom-sensitivity-to-light.mp3
+symptom-sensitivity-to-noise	Sensitivity to noise. Zero to six.	symptom-sensitivity-to-noise.mp3
+symptom-feeling-slowed-down	Feeling slowed down. Zero to six.	symptom-feeling-slowed-down.mp3
+symptom-feeling-like-in-a-fog	Feeling like “in a fog”. Zero to six.	symptom-feeling-like-in-a-fog.mp3
+symptom-don-t-feel-right	“Don’t feel right”. Zero to six.	symptom-don-t-feel-right.mp3
+symptom-difficulty-concentrating	Difficulty concentrating. Zero to six.	symptom-difficulty-concentrating.mp3
+symptom-difficulty-remembering	Difficulty remembering. Zero to six.	symptom-difficulty-remembering.mp3
+symptom-fatigue-or-low-energy	Fatigue or low energy. Zero to six.	symptom-fatigue-or-low-energy.mp3
+symptom-confusion	Confusion. Zero to six.	symptom-confusion.mp3
+symptom-drowsiness	Drowsiness. Zero to six.	symptom-drowsiness.mp3
+symptom-more-emotional	More emotional. Zero to six.	symptom-more-emotional.mp3
+symptom-irritability	Irritability. Zero to six.	symptom-irritability.mp3
+symptom-sadness	Sadness. Zero to six.	symptom-sadness.mp3
+symptom-nervous-or-anxious	Nervous or anxious. Zero to six.	symptom-nervous-or-anxious.mp3
+symptom-trouble-falling-asleep	Trouble falling asleep. Zero to six.	symptom-trouble-falling-asleep.mp3
+overall	Overall. Zero is fine. Ten is worst. Choose, then save.	overall.mp3
+risk-prior	Have you had a concussion before? Yes, no, or skip if shown.	risk-prior.mp3
+risk-migraine	Do you get migraines? Yes, no, or skip if shown.	risk-migraine.mp3
+risk-adhd	Have you been diagnosed with ADHD or a learning difference? Yes, no, or skip if shown.	risk-adhd.mp3
+risk-anxiety	Have you had anxiety or depression that needed treatment? Yes, no, or skip if shown.	risk-anxiety.mp3
+risk-loc	Did you lose consciousness? Yes, no, or skip if shown.	risk-loc.mp3
+risk-amnesia	Any gap in memory around the injury? Yes, no, or skip if shown.	risk-amnesia.mp3
+risk-repeat	Is this your second concussion in 12 months? Yes, no, or skip if shown.	risk-repeat.mp3
+risk-sport	Did this happen in contact sport? Yes, no, or skip if shown.	risk-sport.mp3
+risk-worse	Are symptoms worse than last time, if you’ve had one before? Yes, no, or skip if shown.	risk-worse.mp3

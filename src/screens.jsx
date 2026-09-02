@@ -14,6 +14,7 @@ import {
   WARMUP_SECONDS,
 } from './data.js'
 import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt } from './speech.js'
+import { symptomClipId } from './voiceClips.js'
 import { modelSessionBpm } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
 import {
@@ -429,7 +430,8 @@ export function Settings({
             </button>
           </div>
           <InfoCard label="About the voice" tone="in">
-            Threshold picks a softer system voice when one exists, speaks slower, and keeps lines short so listening is less tiring.
+            When Kokoro MP3 clips are in the app, Threshold plays those instead of the phone’s
+            robotic system voice. Generate clips with npm run voice:manifest, then follow scripts/KOKORO_VOICE.md.
           </InfoCard>
           <InfoCard label="Clinician handoff" tone="in">
             Share a read-only timeline of check-ins and sessions with your care team.
@@ -708,7 +710,7 @@ export function Symptom({ go, index, scores, setScores, setIndex, audioCheckin, 
       cancelSpeak()
       return undefined
     }
-    speak(prompt)
+    speak(prompt, { clipId: symptomClipId(SYMPTOMS[index]) })
     return () => cancelSpeak()
   }, [useAudio, voiceMuted, prompt, index])
 
@@ -793,7 +795,7 @@ export function Overall({
       cancelSpeak()
       return undefined
     }
-    speak(prompt)
+    speak(prompt, { clipId: 'overall' })
     return () => cancelSpeak()
   }, [useAudio, voiceMuted, prompt])
 
