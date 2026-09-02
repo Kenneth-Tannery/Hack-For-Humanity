@@ -32,6 +32,7 @@ import {
   Secondary,
   Status,
   Title,
+  ToggleSwitch,
 } from './ui.jsx'
 
 export function Splash({ go, theme, setTheme }) {
@@ -272,19 +273,21 @@ export function Home({
   }
   return (
     <Screen>
-      <Status left={<Clock />} right={`Day ${day}`} />
+      <div className="home-meta">
+        <span>Today</span>
+        <span>Day {day}</span>
+      </div>
       <div className="screen-body">
-        <Kicker>Today</Kicker>
-        <Title wide>
-          Subthreshold training
-          <span style={{ display: 'block' }}>Level {level}</span>
-        </Title>
+        <div className="home-head">
+          <Kicker tone="in">Level {level}</Kicker>
+          <Title wide>Subthreshold training</Title>
+        </div>
         <div className="stack">
           <Card>
             <div className="card-label">Today’s session</div>
             <div className="card-value">20 minutes</div>
             <div className="card-sub">
-              Level {level} · Target {zone.low}–{zone.high} bpm
+              Target {zone.low}–{zone.high} bpm
             </div>
             <div className="card-cite">
               Age + training level — Concussion Alliance at-home stages; Amsterdam consensus 2023.
@@ -361,48 +364,50 @@ export function Settings({
         <Title>Settings</Title>
         <Lead>Voice guide reads each screen aloud in a calmer voice. You can mute anytime.</Lead>
         <div className="stack">
-          <div className="field">
-            <label htmlFor="settings-injury-date">Date of injury</label>
-            <input
-              id="settings-injury-date"
-              type="date"
-              value={injuryDate || today}
-              max={today}
-              onChange={(e) => onInjuryDateChange?.(e.target.value)}
-            />
-            <small style={{ display: 'block', marginTop: 8, color: 'var(--muted)' }}>
-              Saved on this device. Defaults to today during setup.
-            </small>
-          </div>
-          <button
-            type="button"
-            className={`toggle-row${voiceGuide ? ' on' : ''}`}
-            onClick={() => setVoiceGuide?.(!voiceGuide)}
-            aria-pressed={Boolean(voiceGuide)}
-            disabled={!speechOk}
-          >
-            <span>
-              <strong>Voice guide</strong>
-              <small>
-                {speechOk
-                  ? 'Speak every screen. Soft, slow voice.'
-                  : 'Speech is not available in this browser.'}
+          <div className="settings-panel">
+            <div className="field">
+              <label htmlFor="settings-injury-date">Date of injury</label>
+              <input
+                id="settings-injury-date"
+                type="date"
+                value={injuryDate || today}
+                max={today}
+                onChange={(e) => onInjuryDateChange?.(e.target.value)}
+              />
+              <small style={{ display: 'block', marginTop: 8, color: 'var(--ink-3)' }}>
+                Saved on this device. Defaults to today during setup.
               </small>
-            </span>
-            <span className="toggle-pill">{voiceGuide ? 'On' : 'Off'}</span>
-          </button>
-          <button
-            type="button"
-            className={`toggle-row${theme === 'paper' ? ' on' : ''}`}
-            onClick={() => setTheme(theme === 'dark' ? 'paper' : 'dark')}
-            aria-pressed={theme === 'paper'}
-          >
-            <span>
-              <strong>Paper theme</strong>
-              <small>Warmer light surface. Dark stays the default.</small>
-            </span>
-            <span className="toggle-pill">{theme === 'paper' ? 'On' : 'Off'}</span>
-          </button>
+            </div>
+            <button
+              type="button"
+              className={`toggle-row${voiceGuide ? ' on' : ''}`}
+              onClick={() => setVoiceGuide?.(!voiceGuide)}
+              aria-pressed={Boolean(voiceGuide)}
+              disabled={!speechOk}
+            >
+              <span>
+                <strong>Voice guide</strong>
+                <small>
+                  {speechOk
+                    ? 'Speak every screen. Soft, slow voice.'
+                    : 'Speech is not available in this browser.'}
+                </small>
+              </span>
+              <ToggleSwitch on={Boolean(voiceGuide)} />
+            </button>
+            <button
+              type="button"
+              className={`toggle-row${theme === 'paper' ? ' on' : ''}`}
+              onClick={() => setTheme(theme === 'dark' ? 'paper' : 'dark')}
+              aria-pressed={theme === 'paper'}
+            >
+              <span>
+                <strong>Paper theme</strong>
+                <small>Warmer light surface. Dark stays the default.</small>
+              </span>
+              <ToggleSwitch on={theme === 'paper'} />
+            </button>
+          </div>
           <InfoCard label="About the voice" tone="in">
             Threshold picks a softer system voice when one exists, speaks slower, and keeps lines short so listening is less tiring.
           </InfoCard>
@@ -703,7 +708,7 @@ export function Overall({
         <Title>How bad is it right now?</Title>
         <Lead>0 is completely fine. 10 is the worst it has been.</Lead>
         <div
-          className="choice-stack"
+          className="choice-stack choice-stack-static"
           role="radiogroup"
           aria-label="Overall symptoms. Scale from 0 completely fine to 10 the worst it has been."
         >
@@ -785,50 +790,71 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
 }
 
 export function ConnectBle({ go, setSource, selected, setSelected }) {
+  const [searching, setSearching] = useState(true)
+
+  useEffect(() => {
+    setSearching(true)
+    const id = window.setTimeout(() => setSearching(false), 1600)
+    return () => window.clearTimeout(id)
+  }, [])
+
   return (
     <Screen>
-      <Status left={<Clock />} right="Searching…" onBack={() => go('preflight')} />
+      <Status
+        left={<Clock />}
+        right={searching ? 'Searching…' : 'Heart rate'}
+        onBack={() => go('preflight')}
+      />
       <div className="screen-body">
         <Kicker>Heart rate</Kicker>
         <Title>Connect your strap</Title>
         <Lead>Chest straps are the most accurate option. Wet the contacts before you put it on.</Lead>
         <div className="stack">
-          <button
-            type="button"
-            className={`device${selected === 'polar' ? ' on' : ''}`}
-            onClick={() => setSelected('polar')}
-            aria-pressed={selected === 'polar'}
-            aria-label="Polar H10 chest strap"
-          >
-            <strong>Polar H10</strong>
-            <small>Battery 62%</small>
-          </button>
-          <button
-            type="button"
-            className={`device${selected === 'garmin' ? ' on' : ''}`}
-            onClick={() => setSelected('garmin')}
-            aria-pressed={selected === 'garmin'}
-            aria-label="Garmin HRM-Dual chest strap"
-          >
-            <strong>Garmin HRM-Dual</strong>
-            <small>Last used 3 days ago</small>
-          </button>
+          {searching ? (
+            <Card>
+              <div className="card-copy">Searching for devices…</div>
+            </Card>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`device${selected === 'polar' ? ' on' : ''}`}
+                onClick={() => setSelected('polar')}
+                aria-pressed={selected === 'polar'}
+                aria-label="Polar H10 chest strap"
+              >
+                <strong>Polar H10</strong>
+                <small>Battery 62%</small>
+              </button>
+              <button
+                type="button"
+                className={`device${selected === 'garmin' ? ' on' : ''}`}
+                onClick={() => setSelected('garmin')}
+                aria-pressed={selected === 'garmin'}
+                aria-label="Garmin HRM-Dual chest strap"
+              >
+                <strong>Garmin HRM-Dual</strong>
+                <small>Last used 3 days ago</small>
+              </button>
+            </>
+          )}
         </div>
-        <InfoCard label="Using the camera?" tone="in">
-          Remove your phone case if you use one — thick cases block the flash and make pulse
-          readings harder.
-        </InfoCard>
+        <p className="connect-ble-note">
+          <strong>No chest strap?</strong> Use your phone camera instead. Remove thick cases so the
+          flash and lens sit flat on your finger.
+        </p>
       </div>
       <Foot>
         <Primary
+          disabled={searching || !selected}
           onClick={() => {
             setSource(selected === 'garmin' ? 'garmin' : 'polar')
             go('preflight')
           }}
         >
-          {selected === 'garmin' ? 'Use Garmin HRM-Dual' : 'Use Polar H10'}
+          {selected === 'garmin' ? 'Use Garmin HRM-Dual' : selected === 'polar' ? 'Use Polar H10' : 'Select a device'}
         </Primary>
-        <Ghost onClick={() => go('connect-camera')}>No strap — use my camera</Ghost>
+        <Ghost onClick={() => go('connect-camera')}>No strap · use my camera</Ghost>
       </Foot>
     </Screen>
   )
@@ -1125,19 +1151,22 @@ export function Warmup({ go, source, cameraBpm, age, level }) {
         Warmup. {announced} beats per minute
         {lockedCamera ? ', tracked from pulse check' : ''}. {formatTime(left)} left. Ease in gently.
       </p>
-      <div className="session-hero">
-        <div className="cue">Ease in gently</div>
-        <div className="bpm-row">
-          <div className="bpm live" aria-hidden="true">
-            {bpm}
-          </div>
-          <div className="bpm-unit">BPM</div>
+      <div className="session-hero session-hero-center">
+        <p className="session-cue-center">Ease in gently</p>
+        <div className="session-timer" aria-hidden="true">
+          {formatTime(left)}
         </div>
-        <p className="hint">
+        <p className="session-sub-center">
           {lockedCamera
-            ? `Tracking toward your target zone from pulse check (${lockedBpm} bpm at start) — hands free.`
+            ? `Tracking from your camera lock (${lockedBpm} bpm). Hands free, like a strap.`
             : 'Walk or pedal slowly. We’ll tell you when to settle into your target.'}
         </p>
+        {!lockedCamera ? (
+          <div className="session-bpm-row">
+            <span className="session-bpm-num">{bpm}</span>
+            <span className="bpm-unit">BPM</span>
+          </div>
+        ) : null}
       </div>
       <Foot>
         <Secondary onClick={() => go(nextScreen)}>Skip to target</Secondary>
@@ -1188,16 +1217,17 @@ export function Active({ go, age, level, source, cameraBpm }) {
         {announced} beats per minute, {status}. Target {zone.low} to {zone.high}. {formatTime(left)} left.{' '}
         {sourceLabel}.
       </p>
-      <div className="session-hero">
-        <div className="cue">Hold here</div>
-        <div className="bpm-row">
-          <div className={`bpm${lockedCamera ? ' live' : ''}`} aria-hidden="true">
-            {bpm}
-          </div>
-          <div className="bpm-unit">BPM</div>
+      <div className="session-hero session-hero-center">
+        <p className="session-cue-center">Hold here</p>
+        <div className="session-timer session-timer-in" aria-hidden="true">
+          {formatTime(left)}
+        </div>
+        <div className="session-bpm-row">
+          <span className="session-bpm-num">{bpm}</span>
+          <span className="bpm-unit">BPM</span>
         </div>
         <div
-          className="gauge"
+          className="gauge gauge-center"
           role="img"
           aria-label={`Heart rate ${bpm}, ${status}. Target ${zone.low} to ${zone.high}.`}
         >
@@ -1208,7 +1238,7 @@ export function Active({ go, age, level, source, cameraBpm }) {
             <div className="needle" style={{ left: `${Math.max(2, Math.min(98, pct))}%` }} />
           </div>
         </div>
-        <p className="sensor">
+        <p className="session-sub-center">
           {sourceLabel}. {status}.
         </p>
       </div>
@@ -1262,7 +1292,7 @@ export function After({ go, after, setAfter, onSave }) {
         <Title>How do you feel now?</Title>
         <Lead>We’ll ask once more in an hour. That settling is what the rule uses.</Lead>
         <div
-          className="choice-stack"
+          className="choice-stack choice-stack-static"
           role="radiogroup"
           aria-label="After session. Overall symptoms from 0 completely fine to 10 the worst it has been."
         >
@@ -1288,58 +1318,82 @@ export function After({ go, after, setAfter, onSave }) {
   )
 }
 
-export function HourLater({ go, hour, setHour, onSave }) {
+export function HourLater({ go, hour, setHour, onSave, before, after }) {
   return (
     <Screen>
       <Status left={<Clock />} right="Follow-up" />
       <div className="screen-body">
         <Kicker>One hour later</Kicker>
-        <Title wide>Have symptoms settled?</Title>
-        <Lead>In a real day this waits an hour. For the prototype, log it now.</Lead>
+        <Title>How do you feel now?</Title>
+        <Lead>
+          After exercise, symptoms should settle within about an hour. Use the same scale as your
+          other check-ins. We compare this to how you felt before you started.
+        </Lead>
+        <div className="hour-summary">
+          <Card>
+            <div className="card-label">Before exercise</div>
+            <div className="card-value">{before} / 10</div>
+          </Card>
+          <Card>
+            <div className="card-label">Right after exercise</div>
+            <div className="card-value">{after} / 10</div>
+          </Card>
+        </div>
+        <p className="hour-demo-note">
+          Demo: you would wait an hour in real life. Pick your best estimate for now.
+        </p>
         <div
-          className="choice-stack"
+          className="choice-stack choice-stack-static"
           role="radiogroup"
           aria-label="One hour later. Overall symptoms from 0 completely fine to 10 the worst it has been."
         >
-          {[3, 4, 5, 6, 7].map((n) => (
+          {OVERALL_CHOICES.map((n) => (
             <button
               key={n}
               type="button"
               role="radio"
               aria-checked={hour === n}
-              aria-label={`${n} of 10, ${OVERALL_LABELS[n] || `${n} out of 10`}`}
+              aria-label={`${n} of 10, ${OVERALL_LABELS[n]}`}
               className={`choice${hour === n ? ' on' : ''}`}
               onClick={() => setHour(n)}
             >
-              {n} / 10
+              {n} {OVERALL_LABELS[n]}
             </button>
           ))}
         </div>
+        <p className="card-cite" style={{ marginTop: 12 }}>
+          Amsterdam consensus 2023: rise during exercise and settling within an hour both matter.
+        </p>
       </div>
       <Foot>
-        <Primary onClick={() => (onSave ? onSave() : go('held'))}>See today’s rule</Primary>
+        <Primary onClick={() => (onSave ? onSave() : go('held'))}>Save</Primary>
       </Foot>
     </Screen>
   )
 }
 
-export function Held({ go, before, after, hour, setLevel, level }) {
-  const rise = after - before
-  const settled = hour - before <= 2 && rise <= 2
-  const nextLevel = settled ? Math.min(5, level + 1) : level
-  const advanced = settled && nextLevel > level
-  const atMax = level >= 5
+export function Held({ go, before, after, hour, level, evaluation, onFinish }) {
+  const rise = evaluation?.rise ?? after - before
+  const hourDelta = evaluation?.hourDelta ?? hour - before
+  const settled = evaluation?.settled ?? (rise <= 2 && hourDelta <= 2)
+  const levelBefore = evaluation?.levelBefore ?? level ?? 2
+  const levelAfter =
+    evaluation?.nextLevel ??
+    evaluation?.levelAfter ??
+    (settled ? Math.min(5, levelBefore + 1) : levelBefore)
+  const advanced = settled && levelAfter > levelBefore
+  const atMax = levelAfter >= 5
   const kicker = advanced
-    ? `Moving to level ${nextLevel}`
+    ? `Level ${levelBefore} → ${levelAfter}`
     : atMax && settled
-      ? 'Level 5 — top of the progression'
-      : `Staying at level ${level}`
+      ? 'Level 5 · top of the progression'
+      : `Staying at level ${levelBefore}`
   const title = advanced
     ? 'That sat inside the rule'
     : atMax && settled
       ? 'You’re already at the top level'
       : 'Not moving up today'
-  const button = advanced || (atMax && settled) ? 'Back to today' : 'Try again tomorrow'
+  const button = settled ? 'See you tomorrow' : 'Try again tomorrow'
   return (
     <Screen>
       <Status left={<Clock />} right="" />
@@ -1352,23 +1406,22 @@ export function Held({ go, before, after, hour, setLevel, level }) {
             <strong>{before} / 10</strong>
           </div>
           <div className={`metric-row${rise > 2 ? ' hot' : ''}`}>
-            <span>After session{rise > 2 ? ' — rose more than 2 points' : ''}</span>
+            <span>After session{rise > 2 ? ' (rose more than 2 points)' : ''}</span>
             <strong>{after} / 10</strong>
           </div>
-          <div className={`metric-row${hour - before > 2 ? ' hot' : ''}`}>
-            <span>One hour later{hour - before > 2 ? ' — had not settled' : ''}</span>
+          <div className={`metric-row${hourDelta > 2 ? ' hot' : ''}`}>
+            <span>One hour later{hourDelta > 2 ? ' (had not settled)' : ''}</span>
             <strong>{hour} / 10</strong>
           </div>
           {atMax ? (
             <InfoCard label="About levels" tone="in">
-              Levels run from 1 to 5. Five is the highest subthreshold step in this prototype — staying here after a
+              Levels run from 1 to 5. Five is the highest subthreshold step in this prototype. Staying here after a
               good session is expected, not a bug.
             </InfoCard>
           ) : null}
-          <div className="card">
-            <div className="card-label">The rule this follows</div>
+          <InfoCard label="The rule this follows" tone="in">
             <div className="rule-card">
-              <div className="rule-bar" />
+              <div className="rule-bar" aria-hidden="true" />
               <div>
                 <div className="card-copy">
                   Symptoms may rise up to 2 points during exercise, as long as they settle within an hour.
@@ -1379,16 +1432,11 @@ export function Held({ go, before, after, hour, setLevel, level }) {
                 <div className="card-cite">Amsterdam consensus 2023 · Br J Sports Med 57:695–711</div>
               </div>
             </div>
-          </div>
+          </InfoCard>
         </div>
       </div>
       <Foot>
-        <Primary
-          onClick={() => {
-            if (advanced) setLevel(nextLevel)
-            go('home')
-          }}
-        >
+        <Primary onClick={() => (onFinish ? onFinish({ settled, advanced, atMax }) : go('home'))}>
           {button}
         </Primary>
       </Foot>

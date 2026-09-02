@@ -109,6 +109,9 @@ export const WARMUP_SECONDS = 3 * 60
 /** Remainder of the 20-minute bout after warmup. */
 export const ACTIVE_SECONDS = SESSION_MINUTES * 60 - WARMUP_SECONDS
 
+/** Camera mid-session pulse check at this fraction of main exercise elapsed. */
+export const CAMERA_MIDCHECK_FRACTION = 0.5
+
 export function dayNumber(injuryDate) {
   const start = new Date(`${injuryDate}T00:00:00`)
   if (Number.isNaN(start.getTime())) return 1
@@ -128,12 +131,39 @@ export function formatInjuryDate(iso) {
   })
 }
 
+const DEMO_DAY_OFFSET_KEY = 'threshold-demo-day-offset'
+
+/** Prototype-only: shift “today” forward after a completed session day. */
+export function getDemoDayOffset() {
+  const n = Number(localStorage.getItem(DEMO_DAY_OFFSET_KEY) || 0)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+export function advanceDemoDay() {
+  const next = getDemoDayOffset() + 1
+  localStorage.setItem(DEMO_DAY_OFFSET_KEY, String(next))
+  return next
+}
+
+export function resetDemoDay() {
+  localStorage.removeItem(DEMO_DAY_OFFSET_KEY)
+}
+
 /** Local calendar date as YYYY-MM-DD (for date inputs and “today” checks). */
 export function localDate(d = new Date()) {
   const yy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return `${yy}-${mm}-${dd}`
+}
+
+/** App “today” with demo day offset applied (sessions, check-ins). */
+export function appLocalDate(d = new Date()) {
+  const offset = getDemoDayOffset()
+  if (!offset) return localDate(d)
+  const shifted = new Date(d)
+  shifted.setDate(shifted.getDate() + offset)
+  return localDate(shifted)
 }
 
 /** Per-level target bands (% of age-predicted max HR). Concussion Alliance at-home stages; Amsterdam 2023 return-to-sport steps. */
@@ -152,10 +182,24 @@ function clampLevel(level) {
 }
 
 /** Age-predicted max HR (220 − age) with level-based subthreshold band. */
-export function targetZone(age, level = 2) {
+export function targetZone(age, level = 2, restingBpm = null) {
   const max = 220 - Number(age || 16)
   const lv = clampLevel(level)
   const band = LEVEL_ZONE_BANDS[lv] ?? LEVEL_ZONE_BANDS[2]
+  const rest = Number(restingBpm)
+  const reserve = max - rest
+  if (Number.isFinite(rest) && reserve > 20) {
+    return {
+      low: Math.round(rest + reserve * band.lowPct),
+      high: Math.round(rest + reserve * band.highPct),
+      lowPct: band.lowPct,
+      highPct: band.highPct,
+      level: lv,
+      maxHr: max,
+      restingBpm: rest,
+      personalized: true,
+    }
+  }
   return {
     low: Math.round(max * band.lowPct),
     high: Math.round(max * band.highPct),
@@ -163,6 +207,7 @@ export function targetZone(age, level = 2) {
     highPct: band.highPct,
     level: lv,
     maxHr: max,
+    personalized: false,
   }
 }
 

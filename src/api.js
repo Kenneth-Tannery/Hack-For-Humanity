@@ -1,5 +1,5 @@
 import * as clientApi from './clientApi.js'
-import { localDate as todayLocalDate } from './data.js'
+import { advanceDemoDay, appLocalDate, resetDemoDay } from './data.js'
 
 const PROFILE_KEY = 'threshold-profile-id'
 
@@ -33,8 +33,10 @@ async function request(path, options = {}) {
 }
 
 export function localDate() {
-  return todayLocalDate()
+  return appLocalDate()
 }
+
+export { advanceDemoDay, resetDemoDay }
 
 export function savedProfileId() {
   return localStorage.getItem(PROFILE_KEY) || ''
@@ -65,13 +67,18 @@ export function createProfile({ injuryDate, age, answers }) {
   })
 }
 
-export function updateProfile(profileId, { injuryDate, age, answers }) {
+export function updateProfile(profileId, { injuryDate, age, answers, level }) {
   if (useClientStore()) {
-    return clientApi.updateProfile(profileId, { injuryDate, age: Number(age), answers })
+    return clientApi.updateProfile(profileId, {
+      injuryDate,
+      age: age != null ? Number(age) : undefined,
+      answers,
+      level,
+    })
   }
   return request(`/profiles/${profileId}`, {
     method: 'PATCH',
-    body: { injuryDate, age: Number(age), answers },
+    body: { injuryDate, age: age != null ? Number(age) : undefined, answers, level },
   })
 }
 

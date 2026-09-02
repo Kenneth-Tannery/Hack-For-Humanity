@@ -192,17 +192,17 @@ export function screenPrompt(screen, ctx = {}) {
     case 'after':
       return 'After session. How do you feel now? Choose a rating, then save.'
     case 'hour':
-      return 'One hour later. Have symptoms settled? Choose a rating.'
+      return 'One hour later. How do you feel now? Choose a rating on the same scale.'
     case 'held': {
-      const level = Number(ctx.level ?? 2)
-      const next = Math.min(5, level + 1)
-      if (ctx.settled && next > level) {
-        return `Moving up to level ${next}. Symptoms stayed inside the rule. Back to today.`
+      const levelBefore = Number(ctx.levelBefore ?? ctx.level ?? 2)
+      const next = Math.min(5, levelBefore + 1)
+      if (ctx.settled && next > levelBefore) {
+        return `Moving up to level ${next}. Symptoms stayed inside the rule. See you tomorrow.`
       }
-      if (ctx.settled && level >= 5) {
-        return 'Level 5. Top of the progression. Back to today.'
+      if (ctx.settled && levelBefore >= 5) {
+        return 'Level 5. Top of the progression. See you tomorrow.'
       }
-      return `Staying at level ${ctx.level ?? 'this'}. Try again tomorrow.`
+      return `Staying at level ${levelBefore}. Try again tomorrow.`
     }
     case 'settings':
       return 'Settings. Voice guide and theme. Back when done.'
