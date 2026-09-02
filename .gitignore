@@ -18,6 +18,8 @@ cypress/
 cypress.config.js
 cypress.config.mjs
 cypress.config.ts
+
+# Cypress PNG exports live in .cypress/ (not gitignored — survives branch switches)
 .vercel
 
 # Vercel CLI cache — local project link only; NOT .env (secrets stay in Vercel dashboard)

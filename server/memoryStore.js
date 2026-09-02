@@ -21,6 +21,8 @@ export function createProfile({ id, injuryDate, age, answers, level = LEVEL_STAR
     level,
     answers: answers || {},
     hrSource: null,
+    level5StableStreak: 0,
+    progressionPhase: 'training',
   }
   profiles.set(id, profile)
   return getProfile(id)
@@ -28,7 +30,13 @@ export function createProfile({ id, injuryDate, age, answers, level = LEVEL_STAR
 
 export function getProfile(id) {
   const p = profiles.get(id)
-  return p ? { ...p, answers: { ...p.answers } } : null
+  if (!p) return null
+  return {
+    ...p,
+    answers: { ...p.answers },
+    level5StableStreak: p.level5StableStreak ?? 0,
+    progressionPhase: p.progressionPhase ?? 'training',
+  }
 }
 
 export function updateProfile(id, patch) {
@@ -40,6 +48,9 @@ export function updateProfile(id, patch) {
     level: patch.level ?? current.level,
     answers: patch.answers ?? current.answers,
     hrSource: patch.hrSource === undefined ? current.hrSource : patch.hrSource,
+    level5StableStreak:
+      patch.level5StableStreak != null ? patch.level5StableStreak : (current.level5StableStreak ?? 0),
+    progressionPhase: patch.progressionPhase ?? current.progressionPhase ?? 'training',
     updatedAt: new Date().toISOString(),
   })
   return getProfile(id)

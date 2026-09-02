@@ -12,7 +12,8 @@
     "deploy:prod": "npx vercel --prod",
     "run": "npx vercel --prod",
     "cy:open": "cypress open",
-    "cy:run": "cypress run --spec cypress/e2e/local/**/*.cy.js"
+    "cy:run": "cypress run --spec cypress/e2e/local/**/*.cy.js",
+    "cy:level-5": "cypress run --config-file cypress.config.js --spec cypress/e2e/local/level-5-flow.cy.js && node scripts/flatten-figma-screens.mjs"
   },
   "engines": {
     "node": "24.x"

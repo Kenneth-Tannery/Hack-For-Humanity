@@ -16,6 +16,7 @@ import {
   dayNumberOn,
   evaluateProgression,
   outlookFromAnswers,
+  recordLevel5Progress,
   targetZone,
 } from '../server/clinical.js'
 import { RED_FLAGS, SYMPTOMS } from './data.js'
@@ -60,7 +61,13 @@ function mapCheckin(row) {
 
 function getProfile(db, id) {
   const p = db.profiles[id]
-  return p ? { ...p, answers: { ...p.answers } } : null
+  if (!p) return null
+  return {
+    ...p,
+    answers: { ...p.answers },
+    level5StableStreak: p.level5StableStreak ?? 0,
+    progressionPhase: p.progressionPhase ?? 'training',
+  }
 }
 
 function listCheckins(db, profileId) {
@@ -120,6 +127,10 @@ function todayPayload(db, profile, localDate) {
     outlook: outlookFromAnswers(profile.answers),
     hrSource: profile.hrSource,
     lastCheckin: latest,
+    progressionPhase: profile.progressionPhase ?? 'training',
+    level5StableStreak: profile.level5StableStreak ?? 0,
+    level5StableRequired: 3,
+    inMaintenance: (profile.progressionPhase ?? 'training') === 'maintenance',
   }
 }
 
@@ -178,13 +189,15 @@ export async function createProfile({ injuryDate, age, answers, localDate }) {
     level: LEVEL_START,
     answers: answers || {},
     hrSource: null,
+    level5StableStreak: 0,
+    progressionPhase: 'training',
   }
   db.profiles[id] = profile
   saveDb(db)
   return { profile: getProfile(db, id), today: todayPayload(db, profile, localDate) }
 }
 
-export async function updateProfile(profileId, { injuryDate, age, answers, hrSource, level }) {
+export async function updateProfile(profileId, { injuryDate, age, answers, hrSource, level, level5StableStreak, progressionPhase }) {
   const db = loadDb()
   const current = requireProfile(db, profileId)
   Object.assign(current, {
@@ -193,6 +206,9 @@ export async function updateProfile(profileId, { injuryDate, age, answers, hrSou
     answers: answers ?? current.answers,
     hrSource: hrSource === undefined ? current.hrSource : hrSource,
     level: level != null ? clampLevel(level) : current.level,
+    level5StableStreak:
+      level5StableStreak != null ? Math.max(0, Math.floor(level5StableStreak)) : current.level5StableStreak,
+    progressionPhase: progressionPhase ?? current.progressionPhase,
     updatedAt: new Date().toISOString(),
   })
   db.profiles[profileId] = current
@@ -380,6 +396,9 @@ export async function saveHour(profileId, sessionId, { hour, after }) {
     level: session.levelBefore ?? profile.level,
   })
   profile.level = result.nextLevel
+  const l5 = recordLevel5Progress(profile, { settled: result.settled, levelBefore: result.levelBefore })
+  profile.level5StableStreak = l5.level5StableStreak
+  profile.progressionPhase = l5.progressionPhase
   profile.updatedAt = new Date().toISOString()
   Object.assign(session, {
     after: afterScore,
@@ -396,7 +415,7 @@ export async function saveHour(profileId, sessionId, { hour, after }) {
   saveDb(db)
   return {
     session: getSession(db, sessionId),
-    evaluation: result,
+    evaluation: { ...result, ...l5 },
     today: todayPayload(db, getProfile(db, profileId), session.localDate),
   }
 }

@@ -73,6 +73,48 @@ export function evaluateProgression({ before, after, hour, level }) {
   }
 }
 
+/** Stable Level 5 sessions required before maintenance-only mode (symptom check-in, no prescribed exercise). */
+export const LEVEL5_STABLE_REQUIRED = 3
+
+/**
+ * After a completed session: count stable days at Level 5, graduate after LEVEL5_STABLE_REQUIRED.
+ * Resets the streak if symptoms break the Amsterdam rule or the session was below Level 5.
+ */
+export function recordLevel5Progress(profile, { settled, levelBefore }) {
+  if (profile.progressionPhase === 'maintenance') {
+    return {
+      level5StableStreak: profile.level5StableStreak ?? LEVEL5_STABLE_REQUIRED,
+      level5StableRequired: LEVEL5_STABLE_REQUIRED,
+      graduated: false,
+      progressionPhase: 'maintenance',
+    }
+  }
+  const lv = clampLevel(levelBefore)
+  if (lv < LEVEL_MAX || !settled) {
+    return {
+      level5StableStreak: 0,
+      level5StableRequired: LEVEL5_STABLE_REQUIRED,
+      graduated: false,
+      progressionPhase: 'training',
+    }
+  }
+  const streak = (profile.level5StableStreak ?? 0) + 1
+  if (streak >= LEVEL5_STABLE_REQUIRED) {
+    return {
+      level5StableStreak: streak,
+      level5StableRequired: LEVEL5_STABLE_REQUIRED,
+      graduated: true,
+      progressionPhase: 'maintenance',
+    }
+  }
+  return {
+    level5StableStreak: streak,
+    level5StableRequired: LEVEL5_STABLE_REQUIRED,
+    graduated: false,
+    progressionPhase: 'training',
+  }
+}
+
 export function clampLevel(level) {
   const n = Number(level)
   if (!Number.isFinite(n)) return LEVEL_START

@@ -157,6 +157,11 @@ export function screenPrompt(screen, ctx = {}) {
     case 'outlook':
       return 'Your outlook. This is not a diagnosis. Tap Start when ready.'
     case 'home':
+      if (ctx.inMaintenance) {
+        return ctx.logged
+          ? `Maintenance mode. ${day} Symptoms logged. Log again anytime.`
+          : `Maintenance mode. ${day} Log symptoms today. No prescribed exercise.`
+      }
       if (ctx.logged) {
         return `Today. ${day} ${level} Symptoms logged. Start session, or log again.`
       }
@@ -196,10 +201,18 @@ export function screenPrompt(screen, ctx = {}) {
     case 'held': {
       const levelBefore = Number(ctx.levelBefore ?? ctx.level ?? 2)
       const next = Math.min(5, levelBefore + 1)
+      if (ctx.graduated) {
+        return 'Progression complete. Three stable Level 5 sessions done. Maintenance mode starts tomorrow. Symptom check-in only.'
+      }
       if (ctx.settled && next > levelBefore) {
         return `Moving up to level ${next}. Symptoms stayed inside the rule. See you tomorrow.`
       }
       if (ctx.settled && levelBefore >= 5) {
+        const streak = ctx.level5StableStreak ?? 0
+        const required = 3
+        if (streak > 0 && streak < required) {
+          return `Level 5. Stable session ${streak} of ${required}. See you tomorrow.`
+        }
         return 'Level 5. Top of the progression. See you tomorrow.'
       }
       return `Staying at level ${levelBefore}. Try again tomorrow.`

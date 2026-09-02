@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import * as api from './api.js'
 import { dayNumber, localDate, RISK_QUESTIONS, SYMPTOMS, targetZone } from './data.js'
+import { evaluateProgression, recordLevel5Progress } from '../server/clinical.js'
 import {
   Active,
   After,
@@ -41,6 +42,10 @@ import {
 } from './speech.js'
 import { VoiceDock, SaveError } from './ui.jsx'
 
+const e2eMode =
+  typeof window !== 'undefined' &&
+  (window.Cypress || new URLSearchParams(window.location.search).get('e2e') === '1')
+
 const THEME_KEY = 'threshold-theme'
 const SAVE_PROFILE = 'Could not save your setup. Check the connection, then tap Start again.'
 const SAVE_CHECKIN = 'Could not save today’s check-in. Try Save again.'
@@ -77,6 +82,8 @@ export default function App() {
   const [cameraBpm, setCameraBpm] = useState(null)
   const [strap, setStrap] = useState('polar')
   const [level, setLevel] = useState(2)
+  const [level5StableStreak, setLevel5StableStreak] = useState(0)
+  const [inMaintenance, setInMaintenance] = useState(false)
   const [streak, setStreak] = useState(0)
   const [profileId, setProfileId] = useState(() => api.savedProfileId())
   const [sessionId, setSessionId] = useState(null)
@@ -86,6 +93,7 @@ export default function App() {
   const prevScreen = useRef(screen)
   const prevRisk = useRef(riskIndex)
   const prevVoice = useRef(false)
+  const testApiRef = useRef({})
 
   function setAudioCheckin(on) {
     setAudioCheckinState(on)
@@ -124,6 +132,8 @@ export default function App() {
         setInjuryDate(today.injuryDate)
         setAge(String(today.age))
         setLevel(today.level)
+        setLevel5StableStreak(today.level5StableStreak ?? 0)
+        setInMaintenance(Boolean(today.inMaintenance))
         setLogged(today.loggedToday)
         setStreak(today.streak)
         if (today.overall != null) {
@@ -184,6 +194,9 @@ export default function App() {
         levelBefore: heldEval?.levelBefore ?? level,
         logged,
         pendingSession,
+        inMaintenance,
+        level5StableStreak: heldEval?.level5StableStreak ?? level5StableStreak,
+        graduated: heldEval?.graduated,
       })
       if (prompt) speak(prompt)
     } else if (!voiceGuide && !checkinVoice) {
@@ -208,6 +221,8 @@ export default function App() {
     heldEval,
     logged,
     pendingSession,
+    inMaintenance,
+    level5StableStreak,
   ])
 
   function go(next) {
@@ -233,7 +248,7 @@ export default function App() {
   }
 
   function startSessionAttempt() {
-    if (!todayReady) return
+    if (!todayReady || inMaintenance) return
     setCameraBpm(null)
     if (!logged) {
       setPendingSession(true)
@@ -297,6 +312,8 @@ export default function App() {
   function applyToday(today) {
     if (!today) return
     setLevel(today.level)
+    setLevel5StableStreak(today.level5StableStreak ?? 0)
+    setInMaintenance(Boolean(today.inMaintenance))
     setLogged(today.loggedToday)
     setStreak(today.streak)
     if (today.overall != null) {
@@ -405,8 +422,14 @@ export default function App() {
         if (result?.evaluation) {
           setHeldEval(result.evaluation)
           setLevel(result.evaluation.nextLevel)
+          if (result.evaluation.level5StableStreak != null) {
+            setLevel5StableStreak(result.evaluation.level5StableStreak)
+          }
+          if (result.evaluation.progressionPhase === 'maintenance') {
+            setInMaintenance(true)
+          }
         } else if (result?.today?.level != null) {
-          setLevel(result.today.level)
+          applyToday(result.today)
         }
       } catch (err) {
         console.warn('Could not save follow-up rating', err)
@@ -414,23 +437,32 @@ export default function App() {
         return
       }
     } else {
-      const rise = after - before
-      const hourDelta = hour - before
-      const settled = rise <= 2 && hourDelta <= 2
-      const nextLevel = settled ? Math.min(5, level + 1) : level
+      const result = evaluateProgression({ before, after, hour, level })
+      const l5 = recordLevel5Progress(
+        {
+          level5StableStreak,
+          progressionPhase: inMaintenance ? 'maintenance' : 'training',
+        },
+        { settled: result.settled, levelBefore: result.levelBefore },
+      )
       setHeldEval({
-        rise,
-        hourDelta,
-        settled,
-        levelBefore: level,
-        nextLevel,
-        levelAfter: nextLevel,
+        ...result,
+        ...l5,
+        levelAfter: result.nextLevel,
       })
-      setLevel(nextLevel)
+      setLevel(result.nextLevel)
+      setLevel5StableStreak(l5.level5StableStreak)
+      if (l5.progressionPhase === 'maintenance') setInMaintenance(true)
       if (profileId) {
-        api.updateProfile(profileId, { level: nextLevel }).catch((err) => {
-          console.warn('Could not save training level', err)
-        })
+        api
+          .updateProfile(profileId, {
+            level: result.nextLevel,
+            level5StableStreak: l5.level5StableStreak,
+            progressionPhase: l5.progressionPhase,
+          })
+          .catch((err) => {
+            console.warn('Could not save training level', err)
+          })
       }
     }
     go('held')
@@ -447,7 +479,11 @@ export default function App() {
       if (promotedLevel != null) setLevel(promotedLevel)
       if (profileId && promotedLevel != null) {
         try {
-          await api.updateProfile(profileId, { level: promotedLevel })
+          await api.updateProfile(profileId, {
+            level: promotedLevel,
+            level5StableStreak: heldEval?.level5StableStreak,
+            progressionPhase: heldEval?.progressionPhase,
+          })
         } catch (err) {
           console.warn('Could not save training level', err)
         }
@@ -462,6 +498,8 @@ export default function App() {
           setInjuryDate(today.injuryDate)
           setAge(String(today.age))
           setLevel(promotedLevel ?? today.level)
+          setLevel5StableStreak(today.level5StableStreak ?? 0)
+          setInMaintenance(Boolean(today.inMaintenance))
           setLogged(today.loggedToday)
           setStreak(today.streak)
           if (today.overall != null) setOverall(today.overall)
@@ -475,6 +513,51 @@ export default function App() {
     }
     go('home')
   }
+
+  testApiRef.current = {
+    go,
+    seed(patch = {}) {
+      if (patch.reset) {
+        localStorage.clear()
+        api.forgetProfileId()
+        api.resetDemoDay()
+      }
+      if (patch.demoDayOffset != null) {
+        localStorage.setItem('threshold-demo-day-offset', String(patch.demoDayOffset))
+      }
+      if (patch.profileId !== undefined) {
+        if (patch.profileId) api.rememberProfileId(patch.profileId)
+        else api.forgetProfileId()
+        setProfileId(patch.profileId || '')
+      }
+      if (patch.injuryDate != null) setInjuryDate(patch.injuryDate)
+      if (patch.age != null) setAge(String(patch.age))
+      if (patch.level != null) setLevel(patch.level)
+      if (patch.level5StableStreak != null) setLevel5StableStreak(patch.level5StableStreak)
+      if (patch.inMaintenance != null) setInMaintenance(patch.inMaintenance)
+      if (patch.overall != null) setOverall(patch.overall)
+      if (patch.logged != null) setLogged(patch.logged)
+      if (patch.todayReady != null) setTodayReady(patch.todayReady)
+      if (patch.before != null) setBefore(patch.before)
+      if (patch.after != null) setAfter(patch.after)
+      if (patch.hour != null) setHour(patch.hour)
+      if (patch.streak != null) setStreak(patch.streak)
+      if (patch.source != null) setSource(patch.source)
+      if (patch.cameraBpm != null) setCameraBpm(patch.cameraBpm)
+      if (patch.heldEval !== undefined) setHeldEval(patch.heldEval)
+      if (patch.screen != null) setScreen(patch.screen)
+      if (patch.saveError !== undefined) setSaveError(patch.saveError)
+    },
+  }
+
+  useEffect(() => {
+    if (!e2eMode) return undefined
+    window.__THRESHOLD_TEST__ = {
+      go: (next) => testApiRef.current.go(next),
+      seed: (patch) => testApiRef.current.seed(patch),
+    }
+    return undefined
+  }, [])
 
   const shared = { go, theme, setTheme }
   const voiceDockVisible =
@@ -530,6 +613,8 @@ export default function App() {
         logged={logged}
         level={level}
         todayReady={todayReady}
+        inMaintenance={inMaintenance}
+        level5StableStreak={level5StableStreak}
         setAudioCheckin={setAudioCheckin}
         onOpenCheckin={openCheckin}
         onStartSession={startSessionAttempt}
@@ -664,7 +749,7 @@ export default function App() {
   }
 
   return (
-    <Phone>
+    <Phone data-testid="threshold-phone" data-screen={screen}>
       <div key={screen} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
         {view}
       </div>

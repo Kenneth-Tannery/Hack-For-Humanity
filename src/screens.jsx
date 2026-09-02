@@ -261,12 +261,15 @@ export function Home({
   logged,
   level,
   todayReady = true,
+  inMaintenance = false,
+  level5StableStreak = 0,
   setAudioCheckin,
   onOpenCheckin,
   onStartSession,
 }) {
   const zone = targetZone(age, level)
   const day = dayNumber(injuryDate)
+  const stableRequired = 3
   function startAudioCheckin() {
     setAudioCheckin?.(true)
     go('symptom')
@@ -279,20 +282,32 @@ export function Home({
       </div>
       <div className="screen-body">
         <div className="home-head">
-          <Kicker tone="in">Level {level}</Kicker>
-          <Title wide>Subthreshold training</Title>
+          <Kicker tone="in">{inMaintenance ? 'Maintenance' : `Level ${level}`}</Kicker>
+          <Title wide>{inMaintenance ? 'Symptom check-in' : 'Subthreshold training'}</Title>
         </div>
         <div className="stack">
-          <Card>
-            <div className="card-label">Today’s session</div>
-            <div className="card-value">20 minutes</div>
-            <div className="card-sub">
-              Target {zone.low}–{zone.high} bpm
-            </div>
-            <div className="card-cite">
-              Age + training level — Concussion Alliance at-home stages; Amsterdam consensus 2023.
-            </div>
-          </Card>
+          {inMaintenance ? (
+            <InfoCard label="Progression complete" tone="in">
+              You finished three stable sessions at Level 5. Threshold now tracks symptoms only. No prescribed
+              exercise. Share your log with your clinician for return-to-sport decisions.
+            </InfoCard>
+          ) : (
+            <Card>
+              <div className="card-label">Today’s session</div>
+              <div className="card-value">20 minutes</div>
+              <div className="card-sub">
+                Target {zone.low}–{zone.high} bpm
+              </div>
+              {level >= 5 && level5StableStreak > 0 ? (
+                <div className="card-sub">
+                  Stable Level 5 sessions: {level5StableStreak} of {stableRequired}
+                </div>
+              ) : null}
+              <div className="card-cite">
+                Age + training level — Concussion Alliance at-home stages; Amsterdam consensus 2023.
+              </div>
+            </Card>
+          )}
           <button
             type="button"
             className="card"
@@ -315,7 +330,9 @@ export function Home({
                 ? 'Checking today’s log'
                 : logged
                   ? 'Or open check-in to choose audio or silent'
-                  : 'Log these before you start a session'}
+                  : inMaintenance
+                    ? 'Log how you feel today'
+                    : 'Log these before you start a session'}
             </div>
           </button>
         </div>
@@ -324,19 +341,21 @@ export function Home({
         <Primary onClick={startAudioCheckin} disabled={!todayReady}>
           Log symptoms (audio)
         </Primary>
-        <Secondary
-          onClick={() => (onStartSession ? onStartSession() : go('red-flags'))}
-          disabled={!todayReady}
-          aria-label={
-            !todayReady
-              ? 'Start session. Loading today’s check-in.'
-              : logged
-                ? 'Start session. Opens red flag safety check.'
-                : 'Start session. You will log symptoms first, then see red flag safety check.'
-          }
-        >
-          Start session
-        </Secondary>
+        {!inMaintenance ? (
+          <Secondary
+            onClick={() => (onStartSession ? onStartSession() : go('red-flags'))}
+            disabled={!todayReady}
+            aria-label={
+              !todayReady
+                ? 'Start session. Loading today’s check-in.'
+                : logged
+                  ? 'Start session. Opens red flag safety check.'
+                  : 'Start session. You will log symptoms first, then see red flag safety check.'
+            }
+          >
+            Start session
+          </Secondary>
+        ) : null}
         <Ghost onClick={() => go('settings')}>Settings</Ghost>
       </Foot>
     </Screen>
@@ -1383,22 +1402,29 @@ export function Held({ go, before, after, hour, level, evaluation, onFinish }) {
     (settled ? Math.min(5, levelBefore + 1) : levelBefore)
   const advanced = settled && levelAfter > levelBefore
   const atMax = levelAfter >= 5
-  const kicker = advanced
-    ? `Level ${levelBefore} → ${levelAfter}`
-    : atMax && settled
-      ? 'Level 5 · top of the progression'
-      : `Staying at level ${levelBefore}`
-  const title = advanced
-    ? 'That sat inside the rule'
-    : atMax && settled
-      ? 'You’re already at the top level'
-      : 'Not moving up today'
+  const graduated = Boolean(evaluation?.graduated)
+  const stableRequired = evaluation?.level5StableRequired ?? 3
+  const stableStreak = evaluation?.level5StableStreak ?? 0
+  const kicker = graduated
+    ? 'Progression complete'
+    : advanced
+      ? `Level ${levelBefore} → ${levelAfter}`
+      : atMax && settled
+        ? 'Level 5 · top of the progression'
+        : `Staying at level ${levelBefore}`
+  const title = graduated
+    ? 'You’re in maintenance mode'
+    : advanced
+      ? 'That sat inside the rule'
+      : atMax && settled
+        ? 'You’re already at the top level'
+        : 'Not moving up today'
   const button = settled ? 'See you tomorrow' : 'Try again tomorrow'
   return (
     <Screen>
       <Status left={<Clock />} right="" />
       <div className="screen-body">
-        <Kicker tone={settled ? 'in' : 'above'}>{kicker}</Kicker>
+        <Kicker tone={settled || graduated ? 'in' : 'above'}>{kicker}</Kicker>
         <Title wide>{title}</Title>
         <div className="stack">
           <div className="metric-row">
@@ -1413,10 +1439,16 @@ export function Held({ go, before, after, hour, level, evaluation, onFinish }) {
             <span>One hour later{hourDelta > 2 ? ' (had not settled)' : ''}</span>
             <strong>{hour} / 10</strong>
           </div>
-          {atMax ? (
+          {graduated ? (
+            <InfoCard label="What happens next" tone="in">
+              Three stable Level 5 sessions are done. Tomorrow, Home shows symptom check-in only. No prescribed
+              exercise. Share your log with your clinician for return-to-sport decisions.
+            </InfoCard>
+          ) : atMax && settled ? (
             <InfoCard label="About levels" tone="in">
-              Levels run from 1 to 5. Five is the highest subthreshold step in this prototype. Staying here after a
-              good session is expected, not a bug.
+              {stableStreak >= stableRequired
+                ? 'Levels run from 1 to 5. Five is the highest subthreshold step in this prototype. Staying here after a good session is expected, not a bug.'
+                : `Stable Level 5 sessions: ${stableStreak} of ${stableRequired}. After ${stableRequired} settled sessions at Level 5, prescribed exercise stops and Threshold tracks symptoms only.`}
             </InfoCard>
           ) : null}
           <InfoCard label="The rule this follows" tone="in">
@@ -1436,7 +1468,7 @@ export function Held({ go, before, after, hour, level, evaluation, onFinish }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => (onFinish ? onFinish({ settled, advanced, atMax }) : go('home'))}>
+        <Primary onClick={() => (onFinish ? onFinish({ settled, advanced, atMax, graduated }) : go('home'))}>
           {button}
         </Primary>
       </Foot>
@@ -1444,10 +1476,12 @@ export function Held({ go, before, after, hour, level, evaluation, onFinish }) {
   )
 }
 
-export function Phone({ children }) {
+export function Phone({ children, ...rest }) {
   return (
     <div className="stage">
-      <div className="phone">{children}</div>
+      <div className="phone" {...rest}>
+        {children}
+      </div>
     </div>
   )
 }

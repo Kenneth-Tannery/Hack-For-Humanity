@@ -67,18 +67,27 @@ export function createProfile({ injuryDate, age, answers }) {
   })
 }
 
-export function updateProfile(profileId, { injuryDate, age, answers, level }) {
+export function updateProfile(profileId, { injuryDate, age, answers, level, level5StableStreak, progressionPhase }) {
   if (useClientStore()) {
     return clientApi.updateProfile(profileId, {
       injuryDate,
       age: age != null ? Number(age) : undefined,
       answers,
       level,
+      level5StableStreak,
+      progressionPhase,
     })
   }
   return request(`/profiles/${profileId}`, {
     method: 'PATCH',
-    body: { injuryDate, age: age != null ? Number(age) : undefined, answers, level },
+    body: {
+      injuryDate,
+      age: age != null ? Number(age) : undefined,
+      answers,
+      level,
+      level5StableStreak,
+      progressionPhase,
+    },
   })
 }
 

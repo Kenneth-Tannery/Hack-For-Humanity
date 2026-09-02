@@ -19,6 +19,7 @@ import {
   dayNumberOn,
   evaluateProgression,
   outlookFromAnswers,
+  recordLevel5Progress,
   targetZone,
 } from './clinical.js'
 import * as store from './db.js'
@@ -153,6 +154,10 @@ function todayPayload(profile, localDate) {
     outlook: outlookFromAnswers(profile.answers),
     hrSource: profile.hrSource,
     lastCheckin: latest,
+    progressionPhase: profile.progressionPhase ?? 'training',
+    level5StableStreak: profile.level5StableStreak ?? 0,
+    level5StableRequired: 3,
+    inMaintenance: (profile.progressionPhase ?? 'training') === 'maintenance',
   }
 }
 
@@ -224,6 +229,16 @@ app.patch('/api/profiles/:profileId', (req, res) => {
   if (req.body?.answers != null) patch.answers = parseAnswers(req.body.answers)
   if (req.body?.hrSource !== undefined) patch.hrSource = parseHrSource(req.body.hrSource)
   if (req.body?.level != null) patch.level = clampLevel(req.body.level)
+  if (req.body?.level5StableStreak != null) {
+    patch.level5StableStreak = Math.max(0, Math.floor(Number(req.body.level5StableStreak)))
+  }
+  if (req.body?.progressionPhase != null) {
+    const phase = req.body.progressionPhase
+    if (phase !== 'training' && phase !== 'maintenance') {
+      throw new HttpError(400, 'invalid_phase', 'Progression phase must be training or maintenance.')
+    }
+    patch.progressionPhase = phase
+  }
   const profile = store.updateProfile(current.id, patch)
   res.json({ profile })
 })
@@ -373,7 +388,12 @@ app.post('/api/profiles/:profileId/sessions/:sessionId/hour', (req, res) => {
     hour,
     level: current.levelBefore ?? profile.level,
   })
-  store.updateProfile(profile.id, { level: result.nextLevel })
+  const l5 = recordLevel5Progress(profile, { settled: result.settled, levelBefore: result.levelBefore })
+  store.updateProfile(profile.id, {
+    level: result.nextLevel,
+    level5StableStreak: l5.level5StableStreak,
+    progressionPhase: l5.progressionPhase,
+  })
   const session = store.updateSession(current.id, {
     after,
     hour,
@@ -388,7 +408,7 @@ app.post('/api/profiles/:profileId/sessions/:sessionId/hour', (req, res) => {
   })
   res.json({
     session,
-    evaluation: result,
+    evaluation: { ...result, ...l5 },
     today: todayPayload(store.getProfile(profile.id), current.localDate),
   })
 })
