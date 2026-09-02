@@ -139,6 +139,7 @@ export default function App() {
   function maybeSpeakScreen(next, extra = {}) {
     if (!canSpeak() || voiceMuted || !voiceGuide) return
     if (next === 'symptom' || next === 'overall') return
+    if (next === 'clinician-log' || next === 'settings') return
     speakScreen(next, voiceCtx(extra))
   }
 
@@ -250,7 +251,11 @@ export default function App() {
       setAfter(before)
       setHour(before)
     }
-    if (next === 'settings') setSettingsBack(screen === 'settings' ? settingsBack : screen)
+    if (next === 'settings') {
+      if (screen !== 'settings' && screen !== 'clinician-log') {
+        setSettingsBack(screen)
+      }
+    }
     if (next === 'risk' && screen === 'risk-consent') setRiskIndex(0)
     if (next === 'injury' && !profileId) setInjuryDate(localDate())
     if (next === 'symptom' && (screen === 'checkin' || screen === 'home')) {
@@ -573,11 +578,13 @@ export default function App() {
         const id = api.seedClinicianDemo(patch.profileId || 'e2e-clinician-demo')
         api.rememberProfileId(id)
         setProfileId(id)
-        setInjuryDate('2026-09-01')
+        setInjuryDate('2026-08-20')
         setAge('16')
-        setLevel(3)
+        setLevel(5)
+        setLevel5StableStreak(3)
+        setInMaintenance(true)
         setLogged(true)
-        setOverall(3)
+        setOverall(1)
         setTodayReady(true)
       }
     },
@@ -619,6 +626,7 @@ export default function App() {
         log={clinicianLog}
         loading={logLoading}
         error={logError}
+        settingsBack={settingsBack}
       />
     )
   }

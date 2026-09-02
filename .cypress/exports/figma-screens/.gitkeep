@@ -1,0 +1,2 @@
+# Screenshot exports from Cypress land here (flat PNGs).
+# This folder is outside gitignored cypress/ so exports survive branch switches.

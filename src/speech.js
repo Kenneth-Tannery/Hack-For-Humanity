@@ -39,6 +39,7 @@ let audioUnlocked = false
 let unlockPromise = null
 let unlockListenerBound = false
 let playGeneration = 0
+let speakGeneration = 0
 
 function scoreVoice(voice) {
   const name = `${voice.name} ${voice.lang}`
@@ -217,28 +218,34 @@ export function canSpeak() {
 }
 
 async function speakWithClip(trimmed, clipId) {
+  const gen = ++speakGeneration
   lastSpoken = trimmed
   lastClipId = clipId
 
   await unlockAudio()
+  if (gen !== speakGeneration) return
+
   await warmVoiceClips()
+  if (gen !== speakGeneration) return
 
   const url = clipUrlSync(clipId) || (await clipUrl(clipId))
+  if (gen !== speakGeneration) return
+
   const inManifest = hasClipInManifest(clipId)
 
   if (url) {
     for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (gen !== speakGeneration) return
       try {
         await playClipUrl(url)
         return
       } catch {
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 60))
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 40))
       }
     }
   }
 
-  // Kokoro clip exists — do not fall back to robotic TTS (mixed voices confuse users).
-  if (!inManifest) getEngine().speak(trimmed)
+  if (!inManifest && gen === speakGeneration) getEngine().speak(trimmed)
 }
 
 export function speak(text, options = {}) {
@@ -261,6 +268,7 @@ export function speakScreen(screen, ctx = {}) {
 }
 
 export function cancelSpeak() {
+  speakGeneration += 1
   cancelAudio()
   getEngine().cancel()
 }

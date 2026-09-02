@@ -15,6 +15,7 @@
     "cy:run": "cypress run --spec cypress/e2e/local/**/*.cy.js",
     "cy:level-5": "cypress run --config-file cypress.config.js --spec cypress/e2e/local/level-5-flow.cy.js && node scripts/flatten-figma-screens.mjs",
     "cy:clinician-log": "cypress run --config-file cypress.config.js --spec cypress/e2e/local/clinician-log.cy.js && node scripts/flatten-figma-screens.mjs",
+    "sample:clinician-log": "node scripts/sample-clinician-log.mjs",
     "voice:manifest": "node scripts/generate-voice-manifest.mjs",
     "voice:generate": "py -3.12 scripts/generate-kokoro-clips.py",
     "voice:generate:1": "py -3.12 scripts/generate-kokoro-clips.py --part 1 --parts 4",

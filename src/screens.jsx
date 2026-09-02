@@ -540,7 +540,7 @@ function ClinicianLogRow({ item }) {
   )
 }
 
-export function ClinicianLog({ go, log, loading, error }) {
+export function ClinicianLog({ go, log, loading, error, settingsBack = 'home' }) {
   const profile = log?.profile
   const summary = log?.summary
   const limitations = log?.limitations
@@ -796,6 +796,7 @@ export function Symptom({ go, index, scores, setScores, setIndex, audioCheckin, 
   }, [useAudio, voiceMuted, index, item])
 
   function pick(n) {
+    cancelSpeak()
     unlockAudio()
     const next = [...scores]
     next[index] = n
