@@ -14,6 +14,7 @@ import {
   WARMUP_SECONDS,
 } from './data.js'
 import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt, unlockAudio } from './speech.js'
+import { downloadClinicianLogMd } from './clinicianLogExport.js'
 import { symptomClipId, warmVoiceClips } from './voiceClips.js'
 import { modelSessionBpm } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
@@ -434,7 +435,8 @@ export function Settings({
             robotic system voice. See scripts/KOKORO_VOICE.md to regenerate clips.
           </InfoCard>
           <InfoCard label="Clinician handoff" tone="in">
-            Share a read-only timeline of check-ins and sessions with your care team.
+            Download a Markdown recovery log for your clinician. Symptom ratings, session outcomes, and progression
+            rules included.
             <div style={{ marginTop: 12 }}>
               <Secondary onClick={() => onOpenLog?.()} disabled={!onOpenLog}>
                 Open recovery log
@@ -456,21 +458,93 @@ export function Settings({
   )
 }
 
-function sessionLogDetail(item) {
-  if (item.status === 'completed') {
-    const settled = item.settled ? 'settled' : 'not settled'
-    const lv = item.levelBefore ?? '?'
-    return `Level ${lv} · after ${item.after ?? '?'}/10 · ${settled}`
-  }
-  if (item.status === 'blocked_flags') return 'Blocked · red flags reported'
-  if (item.status === 'blocked_symptoms') return 'Skipped · symptoms above threshold'
-  if (item.status === 'in_progress') return 'In progress'
-  return item.status || 'Session'
+function timelineTypeLabel(item) {
+  if (item.type === 'checkin') return 'Check-in'
+  if (item.outcome === 'blocked_flags') return 'Session · blocked'
+  if (item.outcome === 'blocked_symptoms') return 'Session · skipped'
+  if (item.outcome === 'progressed') return 'Session · progressed'
+  if (item.outcome === 'held') return 'Session · held'
+  return 'Session'
+}
+
+function ClinicianLogRow({ item }) {
+  const [open, setOpen] = useState(false)
+  const clinical = item.clinical ?? {}
+
+  return (
+    <button
+      type="button"
+      className={`metric-row${open ? ' on' : ''}`}
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={open}
+      style={{ textAlign: 'left', width: '100%' }}
+    >
+      <span>
+        {item.date}
+        <br />
+        <small style={{ color: 'var(--ink-3)' }}>{item.note}</small>
+        {open ? (
+          <span className="card-copy" style={{ display: 'block', marginTop: 8 }}>
+            {item.type === 'checkin' ? (
+              <>
+                Overall {item.overall ?? '?'}/10 · symptom total {item.symptomTotal ?? '—'}
+                {item.topSymptoms?.length ? (
+                  <>
+                    <br />
+                    Top symptoms:{' '}
+                    {item.topSymptoms.map((t) => `${t.name} ${t.score}`).join(', ')}
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {item.status === 'completed' ? (
+                  <>
+                    Before {clinical.before ?? '?'}/10 → after {clinical.after ?? '?'}/10 → 1 hr{' '}
+                    {clinical.hour ?? '?'}/10
+                    <br />
+                    Rise {clinical.rise ?? '?'}/10 · hour Δ {clinical.hourDelta ?? '?'}/10 ·{' '}
+                    {clinical.settled ? 'settled' : 'not settled'}
+                    <br />
+                    Level {clinical.levelBefore ?? '?'}
+                    {clinical.levelAfter != null && clinical.levelAfter !== clinical.levelBefore
+                      ? ` → ${clinical.levelAfter}`
+                      : ''}
+                    {clinical.hrSource ? (
+                      <>
+                        <br />
+                        HR source: {clinical.hrSource}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
+                {item.redFlags?.length ? (
+                  <>
+                    <br />
+                    Red flags: {item.redFlags.join('; ')}
+                  </>
+                ) : null}
+                {clinical.cite ? (
+                  <>
+                    <br />
+                    <small style={{ color: 'var(--ink-3)' }}>{clinical.cite}</small>
+                  </>
+                ) : null}
+              </>
+            )}
+          </span>
+        ) : null}
+      </span>
+      <strong>{timelineTypeLabel(item)}</strong>
+    </button>
+  )
 }
 
 export function ClinicianLog({ go, log, loading, error }) {
   const profile = log?.profile
   const summary = log?.summary
+  const limitations = log?.limitations
+
   return (
     <Screen>
       <Status left={<Clock />} right="Recovery log" onBack={() => go('settings')} />
@@ -488,6 +562,9 @@ export function ClinicianLog({ go, log, loading, error }) {
             <InfoCard label="Disclaimer" tone="in">
               {log?.disclaimer}
             </InfoCard>
+            <InfoCard label="What this log cannot do" tone="in" cite={limitations?.cite}>
+              {limitations?.text}
+            </InfoCard>
             {profile ? (
               <Card>
                 <div className="card-label">Profile snapshot</div>
@@ -495,6 +572,8 @@ export function ClinicianLog({ go, log, loading, error }) {
                   Day {profile.day} · Level {profile.level}
                 </div>
                 <div className="card-sub">
+                  Injury {profile.injuryDate} · age {profile.age}
+                  <br />
                   Target {profile.zone?.low}–{profile.zone?.high} bpm
                   {profile.inMaintenance ? ' · Maintenance mode' : ''}
                 </div>
@@ -506,6 +585,9 @@ export function ClinicianLog({ go, log, loading, error }) {
                 <div className="card-copy">
                   {summary.checkins} check-in{summary.checkins === 1 ? '' : 's'} · {summary.completedSessions}{' '}
                   completed session{summary.completedSessions === 1 ? '' : 's'} · {summary.settledSessions} settled
+                  {summary.progressedSessions != null
+                    ? ` · ${summary.progressedSessions} progressed · ${summary.heldSessions} held`
+                    : ''}
                   {summary.blockedFlags || summary.blockedSymptoms
                     ? ` · ${summary.blockedFlags + summary.blockedSymptoms} blocked`
                     : ''}
@@ -519,23 +601,20 @@ export function ClinicianLog({ go, log, loading, error }) {
               </Card>
             ) : (
               log.timeline.map((item) => (
-                <div key={`${item.type}-${item.id || item.date}-${item.at}`} className="metric-row">
-                  <span>
-                    {item.date}
-                    <br />
-                    <small style={{ color: 'var(--ink-3)' }}>
-                      {item.type === 'checkin' ? `Overall ${item.overall ?? '?'}/10` : sessionLogDetail(item)}
-                    </small>
-                  </span>
-                  <strong>{item.type === 'checkin' ? 'Check-in' : 'Session'}</strong>
-                </div>
+                <ClinicianLogRow key={`${item.type}-${item.id || item.date}-${item.at}`} item={item} />
               ))
             )}
           </div>
         )}
       </div>
       <Foot>
-        <Primary onClick={() => go('settings')}>Back to settings</Primary>
+        <Primary
+          onClick={() => log && downloadClinicianLogMd(log)}
+          disabled={loading || Boolean(error) || !log?.timeline?.length}
+        >
+          Save log (.md)
+        </Primary>
+        <Ghost onClick={() => go('settings')}>Back to settings</Ghost>
       </Foot>
     </Screen>
   )

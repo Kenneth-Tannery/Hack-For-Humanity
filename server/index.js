@@ -15,13 +15,13 @@ import {
   catalog,
   clampLevel,
   computeStreak,
-  dayNumber,
   dayNumberOn,
   evaluateProgression,
   outlookFromAnswers,
   recordLevel5Progress,
   targetZone,
 } from './clinical.js'
+import { buildClinicianLog } from './clinicianLog.js'
 import * as store from './db.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -161,33 +161,13 @@ function todayPayload(profile, localDate) {
   }
 }
 
-function clinicianLog(profile) {
-  const checkins = store.listCheckins(profile.id)
-  const sessions = store.listSessions(profile.id)
-  const timeline = [
-    ...checkins.map((item) => ({ type: 'checkin', at: item.loggedAt, date: item.localDate, ...item })),
-    ...sessions.map((item) => ({ type: 'session', at: item.startedAt, date: item.localDate, ...item })),
-  ].sort((a, b) => (a.at < b.at ? 1 : -1))
-
-  return {
-    disclaimer:
-      'Not medical advice. This log is a prototype record of paced aerobic work and symptom ratings. It does not diagnose concussion or clear return to sport.',
-    profile: {
-      ...profile,
-      day: dayNumber(profile.injuryDate),
-      outlook: outlookFromAnswers(profile.answers),
-      zone: targetZone(profile.age, profile.level),
-    },
-    summary: {
-      checkins: checkins.length,
-      sessions: sessions.length,
-      completedSessions: sessions.filter((s) => s.status === 'completed').length,
-      blockedFlags: sessions.filter((s) => s.status === 'blocked_flags').length,
-      blockedSymptoms: sessions.filter((s) => s.status === 'blocked_symptoms').length,
-      settledSessions: sessions.filter((s) => s.settled).length,
-    },
-    timeline,
-  }
+function clinicianLog(profile, localDate) {
+  return buildClinicianLog({
+    profile,
+    checkins: store.listCheckins(profile.id),
+    sessions: store.listSessions(profile.id),
+    localDate: localDate ?? todayLocalFrom({}),
+  })
 }
 
 const app = express()
@@ -250,7 +230,7 @@ app.get('/api/profiles/:profileId/today', (req, res) => {
 
 app.get('/api/profiles/:profileId/log', (req, res) => {
   const profile = requireProfile(req)
-  res.json(clinicianLog(profile))
+  res.json(clinicianLog(profile, todayLocalFrom(req.query)))
 })
 
 app.get('/api/profiles/:profileId/checkins', (req, res) => {

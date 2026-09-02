@@ -19,6 +19,7 @@ import {
   recordLevel5Progress,
   targetZone,
 } from '../server/clinical.js'
+import { buildClinicianLog } from '../server/clinicianLog.js'
 import { RED_FLAGS, SYMPTOMS } from './data.js'
 
 const DB_KEY = 'threshold-client-db-v1'
@@ -423,31 +424,93 @@ export async function saveHour(profileId, sessionId, { hour, after }) {
 export async function getClinicianLog(profileId, localDate) {
   const db = loadDb()
   const profile = requireProfile(db, profileId)
-  const checkins = listCheckins(db, profileId)
-  const sessions = listSessions(db, profileId)
-  const timeline = [
-    ...checkins.map((item) => ({ type: 'checkin', at: item.loggedAt, date: item.localDate, ...item })),
-    ...sessions.map((item) => ({ type: 'session', at: item.startedAt, date: item.localDate, ...item })),
-  ].sort((a, b) => (a.at < b.at ? 1 : -1))
+  return buildClinicianLog({
+    profile,
+    checkins: listCheckins(db, profileId),
+    sessions: listSessions(db, profileId),
+    localDate,
+  })
+}
 
-  return {
-    disclaimer:
-      'Not medical advice. This log is a prototype record of paced aerobic work and symptom ratings. It does not diagnose concussion or clear return to sport.',
-    profile: {
-      ...profile,
-      day: dayNumberOn(profile.injuryDate, localDate),
-      outlook: outlookFromAnswers(profile.answers),
-      zone: targetZone(profile.age, profile.level),
-      inMaintenance: (profile.progressionPhase ?? 'training') === 'maintenance',
-    },
-    summary: {
-      checkins: checkins.length,
-      sessions: sessions.length,
-      completedSessions: sessions.filter((s) => s.status === 'completed').length,
-      blockedFlags: sessions.filter((s) => s.status === 'blocked_flags').length,
-      blockedSymptoms: sessions.filter((s) => s.status === 'blocked_symptoms').length,
-      settledSessions: sessions.filter((s) => s.settled).length,
-    },
-    timeline,
+/** E2E / demo: seed a multi-day log with one progressed and one held session. */
+export function seedClinicianDemoData(profileId = 'e2e-clinician-demo', localDate = '2026-09-03') {
+  const db = loadDb()
+  const injuryDate = '2026-09-01'
+  const scoresMild = SYMPTOMS.map((_, i) => (i === 0 ? 2 : i === 14 ? 1 : 0))
+
+  db.profiles[profileId] = {
+    id: profileId,
+    injuryDate,
+    age: 16,
+    answers: { prior: 'no' },
+    level: 3,
+    level5StableStreak: 0,
+    progressionPhase: 'training',
+    hrSource: 'camera',
+    createdAt: '2026-09-01T08:00:00.000Z',
+    updatedAt: `${localDate}T08:00:00.000Z`,
   }
+
+  db.checkins[`${profileId}:2026-09-02`] = {
+    id: 'ck-demo-1',
+    profileId,
+    localDate: '2026-09-02',
+    loggedAt: '2026-09-02T09:00:00.000Z',
+    scores: [...scoresMild],
+    overall: 3,
+  }
+  db.checkins[`${profileId}:2026-09-03`] = {
+    id: 'ck-demo-2',
+    profileId,
+    localDate: '2026-09-03',
+    loggedAt: '2026-09-03T09:00:00.000Z',
+    scores: [...scoresMild],
+    overall: 3,
+  }
+
+  db.sessions['sess-demo-1'] = {
+    id: 'sess-demo-1',
+    profileId,
+    startedAt: '2026-09-02T10:00:00.000Z',
+    endedAt: '2026-09-02T11:00:00.000Z',
+    localDate: '2026-09-02',
+    status: 'completed',
+    redFlags: [],
+    hrSource: 'camera',
+    before: 3,
+    after: 4,
+    hour: 4,
+    hourLoggedAt: '2026-09-02T11:00:00.000Z',
+    rise: 1,
+    hourDelta: 1,
+    settled: true,
+    levelBefore: 2,
+    levelAfter: 3,
+    zone: { low: 120, high: 140 },
+    durationMin: 20,
+  }
+  db.sessions['sess-demo-2'] = {
+    id: 'sess-demo-2',
+    profileId,
+    startedAt: '2026-09-03T10:00:00.000Z',
+    endedAt: '2026-09-03T11:00:00.000Z',
+    localDate: '2026-09-03',
+    status: 'completed',
+    redFlags: [],
+    hrSource: 'camera',
+    before: 3,
+    after: 6,
+    hour: 5,
+    hourLoggedAt: '2026-09-03T11:00:00.000Z',
+    rise: 3,
+    hourDelta: 2,
+    settled: false,
+    levelBefore: 3,
+    levelAfter: 3,
+    zone: { low: 130, high: 150 },
+    durationMin: 20,
+  }
+
+  saveDb(db)
+  return profileId
 }

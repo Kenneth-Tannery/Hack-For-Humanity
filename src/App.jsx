@@ -569,6 +569,17 @@ export default function App() {
       if (patch.heldEval !== undefined) setHeldEval(patch.heldEval)
       if (patch.screen != null) setScreen(patch.screen)
       if (patch.saveError !== undefined) setSaveError(patch.saveError)
+      if (patch.seedClinicianDemo) {
+        const id = api.seedClinicianDemo(patch.profileId || 'e2e-clinician-demo')
+        api.rememberProfileId(id)
+        setProfileId(id)
+        setInjuryDate('2026-09-01')
+        setAge('16')
+        setLevel(3)
+        setLogged(true)
+        setOverall(3)
+        setTodayReady(true)
+      }
     },
   }
 
