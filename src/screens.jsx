@@ -13,7 +13,7 @@ import {
   targetZone,
   WARMUP_SECONDS,
 } from './data.js'
-import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt } from './speech.js'
+import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt, unlockAudio } from './speech.js'
 import { symptomClipId } from './voiceClips.js'
 import { modelSessionBpm } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
@@ -430,8 +430,8 @@ export function Settings({
             </button>
           </div>
           <InfoCard label="About the voice" tone="in">
-            When Kokoro MP3 clips are in the app, Threshold plays those instead of the phone’s
-            robotic system voice. Generate clips with npm run voice:manifest, then follow scripts/KOKORO_VOICE.md.
+            When Kokoro WAV clips are bundled, Threshold plays those instead of the phone’s
+            robotic system voice. See scripts/KOKORO_VOICE.md to regenerate clips.
           </InfoCard>
           <InfoCard label="Clinician handoff" tone="in">
             Share a read-only timeline of check-ins and sessions with your care team.
@@ -661,6 +661,7 @@ export function NotToday({ go, overall, onOpenCheckin }) {
 export function Checkin({ go, overall, streak, logged, setAudioCheckin, pendingSession }) {
   const speechOk = canSpeak()
   function start(withAudio) {
+    unlockAudio()
     setAudioCheckin?.(withAudio)
     go('symptom')
   }
@@ -716,11 +717,19 @@ export function Symptom({ go, index, scores, setScores, setIndex, audioCheckin, 
 
   function pick(n) {
     cancelSpeak()
+    unlockAudio()
     const next = [...scores]
     next[index] = n
     setScores(next)
-    if (index < SYMPTOMS.length - 1) setIndex(index + 1)
-    else go('overall')
+    if (index < SYMPTOMS.length - 1) {
+      const nextIndex = index + 1
+      setIndex(nextIndex)
+      if (useAudio && !voiceMuted && canSpeak()) {
+        speak(symptomPrompt(SYMPTOMS[nextIndex]), {
+          clipId: symptomClipId(SYMPTOMS[nextIndex]),
+        })
+      }
+    } else go('overall')
   }
 
   function back() {

@@ -14,7 +14,14 @@
     "cy:open": "cypress open",
     "cy:run": "cypress run --spec cypress/e2e/local/**/*.cy.js",
     "cy:level-5": "cypress run --config-file cypress.config.js --spec cypress/e2e/local/level-5-flow.cy.js && node scripts/flatten-figma-screens.mjs",
-    "voice:manifest": "node scripts/generate-voice-manifest.mjs"
+    "voice:manifest": "node scripts/generate-voice-manifest.mjs",
+    "voice:generate": "py -3.12 scripts/generate-kokoro-clips.py",
+    "voice:generate:1": "py -3.12 scripts/generate-kokoro-clips.py --part 1 --parts 4",
+    "voice:generate:2": "py -3.12 scripts/generate-kokoro-clips.py --part 2 --parts 4",
+    "voice:generate:3": "py -3.12 scripts/generate-kokoro-clips.py --part 3 --parts 4",
+    "voice:generate:4": "py -3.12 scripts/generate-kokoro-clips.py --part 4 --parts 4",
+    "voice:generate:all": "npm run voice:generate:1 && npm run voice:generate:2 && npm run voice:generate:3 && npm run voice:generate:4",
+    "voice:generate:node": "node scripts/generate-kokoro-clips.mjs"
   },
   "engines": {
     "node": "24.x"
@@ -29,6 +36,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.2",
     "cypress": "^15.21.1",
+    "kokoro-js": "^1.2.1",
     "vite": "^7.1.3"
   }
 }

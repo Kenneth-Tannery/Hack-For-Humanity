@@ -53,7 +53,12 @@ async function loadManifest() {
   if (clipIndex) return clipIndex
   if (!manifestPromise) {
     manifestPromise = fetch(`${VOICE_BASE}/manifest.json`)
-      .then((res) => (res.ok ? res.json() : null))
+      .then(async (res) => {
+        if (!res.ok) return null
+        const data = await res.json()
+        if (!Array.isArray(data?.clips) || data.clips.length === 0) return null
+        return data
+      })
       .catch(() => null)
   }
   const manifest = await manifestPromise
@@ -61,8 +66,15 @@ async function loadManifest() {
   return clipIndex
 }
 
+export function clipUrlSync(clipId) {
+  if (!clipId || !clipIndex) return null
+  const clip = clipIndex.get(clipId)
+  if (!clip?.file) return null
+  return `${VOICE_BASE}/${clip.file}`
+}
+
 export async function warmVoiceClips() {
-  await loadManifest()
+  return loadManifest()
 }
 
 export async function clipUrl(clipId) {

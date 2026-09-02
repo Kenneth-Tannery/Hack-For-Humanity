@@ -1,7 +1,11 @@
-import { clipUrl, screenClipId } from './voiceClips.js'
+import { clipUrl, clipUrlSync, screenClipId } from './voiceClips.js'
 
 const AUDIO_KEY = 'threshold-audio-checkin'
 const VOICE_GUIDE_KEY = 'threshold-voice-guide'
+
+/** Tiny silent WAV — unlocks mobile audio on first tap. */
+const SILENT_WAV =
+  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA=='
 
 /** Preferred soft / calm voices (name match, case-insensitive). First match wins. */
 const SOFT_VOICE_PATTERNS = [
@@ -24,9 +28,16 @@ let engine = null
 let cachedVoice = null
 let voicesReady = false
 let lastSpoken = ''
+let lastClipId = null
 /** @type {HTMLAudioElement | null} */
 let currentAudio = null
+/** @type {HTMLAudioElement | null} */
+let sharedAudio = null
 let clipsAvailable = false
+let audioUnlocked = false
+/** @type {Promise<boolean> | null} */
+let unlockPromise = null
+let unlockListenerBound = false
 
 function scoreVoice(voice) {
   const name = `${voice.name} ${voice.lang}`
@@ -59,27 +70,85 @@ function ensureVoices(synth) {
   return cachedVoice
 }
 
+function getSharedAudio() {
+  if (!sharedAudio && typeof window !== 'undefined') {
+    sharedAudio = new Audio()
+    sharedAudio.preload = 'auto'
+  }
+  return sharedAudio
+}
+
 function cancelAudio() {
   if (!currentAudio) return
   currentAudio.pause()
   currentAudio.currentTime = 0
+  currentAudio.onended = null
+  currentAudio.onerror = null
   currentAudio = null
+  if (sharedAudio) {
+    sharedAudio.onended = null
+    sharedAudio.onerror = null
+  }
+}
+
+/** Call from a tap/click handler so Kokoro clips can play on mobile. */
+export function unlockAudio() {
+  if (audioUnlocked || typeof window === 'undefined') return Promise.resolve(true)
+  if (unlockPromise) return unlockPromise
+
+  unlockPromise = (async () => {
+    const audio = getSharedAudio()
+    if (!audio) return false
+    audio.src = SILENT_WAV
+    try {
+      await audio.play()
+      audioUnlocked = true
+      return true
+    } catch {
+      return false
+    } finally {
+      unlockPromise = null
+    }
+  })()
+
+  return unlockPromise
+}
+
+/** One-time pointerdown unlock for any screen interaction. */
+export function bindAudioUnlock() {
+  if (unlockListenerBound || typeof window === 'undefined') return
+  unlockListenerBound = true
+  const onPointer = () => {
+    unlockAudio()
+  }
+  window.addEventListener('pointerdown', onPointer, { passive: true, capture: true })
 }
 
 async function playClipUrl(url) {
+  await unlockAudio()
+
   cancelAudio()
   getEngine().cancel()
+
+  const audio = getSharedAudio()
+  if (!audio) throw new Error('audio unavailable')
+
   await new Promise((resolve, reject) => {
-    const audio = new Audio(url)
     currentAudio = audio
     audio.onended = () => {
       currentAudio = null
+      audio.onended = null
+      audio.onerror = null
       resolve(undefined)
     }
     audio.onerror = () => {
       currentAudio = null
+      audio.onended = null
+      audio.onerror = null
       reject(new Error('clip playback failed'))
     }
+    audio.src = url
+    audio.load()
     audio.play().catch(reject)
   })
 }
@@ -126,10 +195,11 @@ function getEngine() {
 export function setSpeechEngine(next) {
   engine = next
   lastSpoken = ''
+  lastClipId = null
   cancelAudio()
 }
 
-/** Call once at startup after Kokoro MP3s may be present. */
+/** Call once at startup after Kokoro clips may be present. */
 export function markVoiceClipsAvailable(on = true) {
   clipsAvailable = Boolean(on)
 }
@@ -138,27 +208,37 @@ export function canSpeak() {
   return clipsAvailable || getEngine().canSpeak()
 }
 
+async function speakWithClip(trimmed, clipId) {
+  lastSpoken = trimmed
+  lastClipId = clipId
+
+  await unlockAudio()
+
+  let url = clipUrlSync(clipId)
+  if (!url) url = await clipUrl(clipId)
+
+  if (url) {
+    try {
+      await playClipUrl(url)
+      return
+    } catch {
+      // Clip failed after unlock — fall back so the user still hears the prompt.
+    }
+  }
+
+  getEngine().speak(trimmed)
+}
+
 export function speak(text, options = {}) {
   const trimmed = String(text || '').trim()
   if (!trimmed) return
-  lastSpoken = trimmed
   const clipId = options.clipId
   if (clipId && typeof window !== 'undefined') {
-    clipUrl(clipId)
-      .then((url) => {
-        if (!url) {
-          getEngine().speak(trimmed)
-          return undefined
-        }
-        return playClipUrl(url).catch(() => {
-          getEngine().speak(trimmed)
-        })
-      })
-      .catch(() => {
-        getEngine().speak(trimmed)
-      })
+    void speakWithClip(trimmed, clipId)
     return
   }
+  lastSpoken = trimmed
+  lastClipId = null
   getEngine().speak(trimmed)
 }
 
@@ -174,7 +254,9 @@ export function cancelSpeak() {
 }
 
 export function repeatLast() {
-  if (lastSpoken) getEngine().speak(lastSpoken)
+  if (!lastSpoken) return
+  if (lastClipId) speak(lastSpoken, { clipId: lastClipId })
+  else getEngine().speak(lastSpoken)
 }
 
 export function getLastSpoken() {

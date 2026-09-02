@@ -31,6 +31,7 @@ import {
   Warmup,
 } from './screens.jsx'
 import {
+  bindAudioUnlock,
   canSpeak,
   cancelSpeak,
   markVoiceClipsAvailable,
@@ -38,10 +39,11 @@ import {
   readVoiceGuidePreference,
   repeatLast,
   speakScreen,
+  unlockAudio,
   writeAudioPreference,
   writeVoiceGuidePreference,
 } from './speech.js'
-import { clipUrl, warmVoiceClips } from './voiceClips.js'
+import { warmVoiceClips } from './voiceClips.js'
 import { VoiceDock, SaveError } from './ui.jsx'
 
 const e2eMode =
@@ -95,9 +97,7 @@ export default function App() {
   const [audioCheckin, setAudioCheckinState] = useState(() => readAudioPreference())
   const [voiceGuide, setVoiceGuideState] = useState(() => readVoiceGuidePreference())
   const [voiceMuted, setVoiceMuted] = useState(false)
-  const prevScreen = useRef(screen)
   const prevRisk = useRef(riskIndex)
-  const prevVoice = useRef(false)
   const testApiRef = useRef({})
 
   function setAudioCheckin(on) {
@@ -111,7 +111,35 @@ export default function App() {
     if (on) {
       setAudioCheckin(true)
       setVoiceMuted(false)
+      unlockAudio().then(() => {
+        speakScreen(screen, voiceCtx())
+      })
     }
+  }
+
+  function voiceCtx(overrides = {}) {
+    return {
+      day: dayNumber(injuryDate),
+      level: heldEval?.nextLevel ?? heldEval?.levelAfter ?? level,
+      overall,
+      zone: targetZone(age, level),
+      riskTitle: RISK_QUESTIONS[riskIndex]?.title,
+      symptomName: SYMPTOMS[symptomIndex],
+      settled: heldEval?.settled ?? (hour - before <= 2 && after - before <= 2),
+      levelBefore: heldEval?.levelBefore ?? level,
+      logged,
+      pendingSession,
+      inMaintenance,
+      level5StableStreak: heldEval?.level5StableStreak ?? level5StableStreak,
+      graduated: heldEval?.graduated,
+      ...overrides,
+    }
+  }
+
+  function maybeSpeakScreen(next, extra = {}) {
+    if (!canSpeak() || voiceMuted || !voiceGuide) return
+    if (next === 'symptom' || next === 'overall') return
+    speakScreen(next, voiceCtx(extra))
   }
 
   useEffect(() => {
@@ -120,16 +148,10 @@ export default function App() {
   }, [theme])
 
   useEffect(() => {
+    bindAudioUnlock()
     warmVoiceClips()
-      .then(() => clipUrl('splash'))
-      .then(async (url) => {
-        if (!url) return
-        try {
-          const res = await fetch(url, { method: 'HEAD' })
-          markVoiceClipsAvailable(res.ok)
-        } catch {
-          markVoiceClipsAvailable(false)
-        }
+      .then((index) => {
+        markVoiceClipsAvailable(Boolean(index?.size))
       })
       .catch(() => markVoiceClipsAvailable(false))
   }, [])
@@ -206,67 +228,21 @@ export default function App() {
     }
   }, [screen, profileId])
 
-  // Full-app voice guide: speak each screen (symptom/overall handle their own lines)
   useEffect(() => {
-    const screenChanged = prevScreen.current !== screen
-    const riskTurn = screen === 'risk' && (screenChanged || prevRisk.current !== riskIndex)
-    const guideJustOn = voiceGuide && !prevVoice.current
-    prevScreen.current = screen
+    if (!voiceGuide && !audioCheckin) cancelSpeak()
+  }, [voiceGuide, audioCheckin])
+
+  // Voice guide: speak on in-screen risk turns (screen changes speak from go()).
+  useEffect(() => {
+    const riskTurn = screen === 'risk' && prevRisk.current !== riskIndex
     prevRisk.current = riskIndex
-    prevVoice.current = voiceGuide
 
-    const checkinVoice =
-      audioCheckin && (screen === 'symptom' || screen === 'overall')
-    const guideHere = voiceGuide && screen !== 'symptom' && screen !== 'overall'
+    if (!canSpeak() || voiceMuted || !voiceGuide) return undefined
+    if (screen !== 'risk' || !riskTurn) return undefined
 
-    if (!canSpeak() || voiceMuted) {
-      cancelSpeak()
-      return undefined
-    }
-
-    if (checkinVoice) return undefined
-
-    if (guideHere && (screenChanged || riskTurn || guideJustOn)) {
-      speakScreen(screen, {
-        day: dayNumber(injuryDate),
-        level: heldEval?.nextLevel ?? heldEval?.levelAfter ?? level,
-        overall,
-        zone: targetZone(age, level),
-        riskTitle: RISK_QUESTIONS[riskIndex]?.title,
-        symptomName: SYMPTOMS[symptomIndex],
-        settled: heldEval?.settled ?? (hour - before <= 2 && after - before <= 2),
-        levelBefore: heldEval?.levelBefore ?? level,
-        logged,
-        pendingSession,
-        inMaintenance,
-        level5StableStreak: heldEval?.level5StableStreak ?? level5StableStreak,
-        graduated: heldEval?.graduated,
-      })
-    } else if (!voiceGuide && !checkinVoice) {
-      cancelSpeak()
-    }
-
+    speakScreen('risk', voiceCtx())
     return undefined
-  }, [
-    screen,
-    voiceGuide,
-    voiceMuted,
-    audioCheckin,
-    injuryDate,
-    level,
-    overall,
-    age,
-    riskIndex,
-    symptomIndex,
-    before,
-    after,
-    hour,
-    heldEval,
-    logged,
-    pendingSession,
-    inMaintenance,
-    level5StableStreak,
-  ])
+  }, [screen, voiceGuide, voiceMuted, riskIndex, injuryDate, level, overall, age, heldEval, logged, pendingSession, inMaintenance, level5StableStreak, before, after, hour, symptomIndex])
 
   function go(next) {
     if (next === 'home') setPendingSession(false)
@@ -283,6 +259,9 @@ export default function App() {
     }
     if (next === 'red-flags') setFlags([])
     setScreen(next)
+    unlockAudio().then(() => {
+      maybeSpeakScreen(next)
+    })
   }
 
   function openCheckin() {
