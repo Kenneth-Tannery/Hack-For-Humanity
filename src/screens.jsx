@@ -14,7 +14,7 @@ import {
   WARMUP_SECONDS,
 } from './data.js'
 import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt, unlockAudio } from './speech.js'
-import { symptomClipId } from './voiceClips.js'
+import { symptomClipId, warmVoiceClips } from './voiceClips.js'
 import { modelSessionBpm } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
 import {
@@ -662,6 +662,7 @@ export function Checkin({ go, overall, streak, logged, setAudioCheckin, pendingS
   const speechOk = canSpeak()
   function start(withAudio) {
     unlockAudio()
+    if (withAudio) void warmVoiceClips()
     setAudioCheckin?.(withAudio)
     go('symptom')
   }
@@ -711,25 +712,17 @@ export function Symptom({ go, index, scores, setScores, setIndex, audioCheckin, 
       cancelSpeak()
       return undefined
     }
-    speak(prompt, { clipId: symptomClipId(SYMPTOMS[index]) })
-    return () => cancelSpeak()
-  }, [useAudio, voiceMuted, prompt, index])
+    speak(prompt, { clipId: symptomClipId(item) })
+    return undefined
+  }, [useAudio, voiceMuted, index, item])
 
   function pick(n) {
-    cancelSpeak()
     unlockAudio()
     const next = [...scores]
     next[index] = n
     setScores(next)
-    if (index < SYMPTOMS.length - 1) {
-      const nextIndex = index + 1
-      setIndex(nextIndex)
-      if (useAudio && !voiceMuted && canSpeak()) {
-        speak(symptomPrompt(SYMPTOMS[nextIndex]), {
-          clipId: symptomClipId(SYMPTOMS[nextIndex]),
-        })
-      }
-    } else go('overall')
+    if (index < SYMPTOMS.length - 1) setIndex(index + 1)
+    else go('overall')
   }
 
   function back() {
@@ -805,7 +798,7 @@ export function Overall({
       return undefined
     }
     speak(prompt, { clipId: 'overall' })
-    return () => cancelSpeak()
+    return undefined
   }, [useAudio, voiceMuted, prompt])
 
   function back() {

@@ -66,6 +66,11 @@ async function loadManifest() {
   return clipIndex
 }
 
+export function hasClipInManifest(clipId) {
+  if (!clipId || !clipIndex) return false
+  return clipIndex.has(clipId)
+}
+
 export function clipUrlSync(clipId) {
   if (!clipId || !clipIndex) return null
   const clip = clipIndex.get(clipId)

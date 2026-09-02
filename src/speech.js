@@ -1,4 +1,4 @@
-import { clipUrl, clipUrlSync, screenClipId } from './voiceClips.js'
+import { clipUrl, clipUrlSync, hasClipInManifest, screenClipId, warmVoiceClips } from './voiceClips.js'
 
 const AUDIO_KEY = 'threshold-audio-checkin'
 const VOICE_GUIDE_KEY = 'threshold-voice-guide'
@@ -38,6 +38,7 @@ let audioUnlocked = false
 /** @type {Promise<boolean> | null} */
 let unlockPromise = null
 let unlockListenerBound = false
+let playGeneration = 0
 
 function scoreVoice(voice) {
   const name = `${voice.name} ${voice.lang}`
@@ -78,13 +79,18 @@ function getSharedAudio() {
   return sharedAudio
 }
 
-function cancelAudio() {
+function stopClipAudio() {
+  playGeneration += 1
   if (!currentAudio) return
   currentAudio.pause()
   currentAudio.currentTime = 0
   currentAudio.onended = null
   currentAudio.onerror = null
   currentAudio = null
+}
+
+function cancelAudio() {
+  stopClipAudio()
   if (sharedAudio) {
     sharedAudio.onended = null
     sharedAudio.onerror = null
@@ -126,25 +132,27 @@ export function bindAudioUnlock() {
 
 async function playClipUrl(url) {
   await unlockAudio()
-
-  cancelAudio()
+  stopClipAudio()
   getEngine().cancel()
 
-  const audio = getSharedAudio()
-  if (!audio) throw new Error('audio unavailable')
+  const gen = playGeneration
+  const audio = new Audio()
+  audio.preload = 'auto'
+  currentAudio = audio
 
   await new Promise((resolve, reject) => {
-    currentAudio = audio
     audio.onended = () => {
-      currentAudio = null
+      if (gen !== playGeneration) return
       audio.onended = null
       audio.onerror = null
+      if (currentAudio === audio) currentAudio = null
       resolve(undefined)
     }
     audio.onerror = () => {
-      currentAudio = null
+      if (gen !== playGeneration) return
       audio.onended = null
       audio.onerror = null
+      if (currentAudio === audio) currentAudio = null
       reject(new Error('clip playback failed'))
     }
     audio.src = url
@@ -213,20 +221,24 @@ async function speakWithClip(trimmed, clipId) {
   lastClipId = clipId
 
   await unlockAudio()
+  await warmVoiceClips()
 
-  let url = clipUrlSync(clipId)
-  if (!url) url = await clipUrl(clipId)
+  const url = clipUrlSync(clipId) || (await clipUrl(clipId))
+  const inManifest = hasClipInManifest(clipId)
 
   if (url) {
-    try {
-      await playClipUrl(url)
-      return
-    } catch {
-      // Clip failed after unlock — fall back so the user still hears the prompt.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await playClipUrl(url)
+        return
+      } catch {
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 60))
+      }
     }
   }
 
-  getEngine().speak(trimmed)
+  // Kokoro clip exists — do not fall back to robotic TTS (mixed voices confuse users).
+  if (!inManifest) getEngine().speak(trimmed)
 }
 
 export function speak(text, options = {}) {
