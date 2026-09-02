@@ -150,3 +150,9 @@ export function saveHour(profileId, sessionId, { hour, after }) {
     body: { hour, after },
   })
 }
+
+export function getClinicianLog(profileId) {
+  const date = localDate()
+  if (useClientStore()) return clientApi.getClinicianLog(profileId, date)
+  return request(`/profiles/${profileId}/log`)
+}

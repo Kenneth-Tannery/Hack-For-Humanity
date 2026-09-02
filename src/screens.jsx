@@ -372,6 +372,7 @@ export function Settings({
   injuryDate,
   onInjuryDateChange,
   onResetSetup,
+  onOpenLog,
 }) {
   const speechOk = canSpeak()
   const today = localDate()
@@ -430,6 +431,14 @@ export function Settings({
           <InfoCard label="About the voice" tone="in">
             Threshold picks a softer system voice when one exists, speaks slower, and keeps lines short so listening is less tiring.
           </InfoCard>
+          <InfoCard label="Clinician handoff" tone="in">
+            Share a read-only timeline of check-ins and sessions with your care team.
+            <div style={{ marginTop: 12 }}>
+              <Secondary onClick={() => onOpenLog?.()} disabled={!onOpenLog}>
+                Open recovery log
+              </Secondary>
+            </div>
+          </InfoCard>
           <InfoCard label="Start over" tone="above">
             Clears your saved profile on this device and returns to setup. Use this if the injury date or day count looks wrong.
             <div style={{ marginTop: 12 }}>
@@ -440,6 +449,91 @@ export function Settings({
       </div>
       <Foot>
         <Primary onClick={() => go(settingsBack || 'home')}>Done</Primary>
+      </Foot>
+    </Screen>
+  )
+}
+
+function sessionLogDetail(item) {
+  if (item.status === 'completed') {
+    const settled = item.settled ? 'settled' : 'not settled'
+    const lv = item.levelBefore ?? '?'
+    return `Level ${lv} · after ${item.after ?? '?'}/10 · ${settled}`
+  }
+  if (item.status === 'blocked_flags') return 'Blocked · red flags reported'
+  if (item.status === 'blocked_symptoms') return 'Skipped · symptoms above threshold'
+  if (item.status === 'in_progress') return 'In progress'
+  return item.status || 'Session'
+}
+
+export function ClinicianLog({ go, log, loading, error }) {
+  const profile = log?.profile
+  const summary = log?.summary
+  return (
+    <Screen>
+      <Status left={<Clock />} right="Recovery log" onBack={() => go('settings')} />
+      <div className="screen-body">
+        <Kicker>For your clinician</Kicker>
+        <Title wide>Recovery log</Title>
+        {loading ? (
+          <Lead>Loading your log…</Lead>
+        ) : error ? (
+          <InfoCard label="Could not load" tone="above">
+            {error}
+          </InfoCard>
+        ) : (
+          <div className="stack">
+            <InfoCard label="Disclaimer" tone="in">
+              {log?.disclaimer}
+            </InfoCard>
+            {profile ? (
+              <Card>
+                <div className="card-label">Profile snapshot</div>
+                <div className="card-value">
+                  Day {profile.day} · Level {profile.level}
+                </div>
+                <div className="card-sub">
+                  Target {profile.zone?.low}–{profile.zone?.high} bpm
+                  {profile.inMaintenance ? ' · Maintenance mode' : ''}
+                </div>
+              </Card>
+            ) : null}
+            {summary ? (
+              <Card>
+                <div className="card-label">Summary</div>
+                <div className="card-copy">
+                  {summary.checkins} check-in{summary.checkins === 1 ? '' : 's'} · {summary.completedSessions}{' '}
+                  completed session{summary.completedSessions === 1 ? '' : 's'} · {summary.settledSessions} settled
+                  {summary.blockedFlags || summary.blockedSymptoms
+                    ? ` · ${summary.blockedFlags + summary.blockedSymptoms} blocked`
+                    : ''}
+                </div>
+              </Card>
+            ) : null}
+            <div className="card-label">Timeline</div>
+            {!log?.timeline?.length ? (
+              <Card>
+                <div className="card-copy">No entries yet. Log symptoms or complete a session first.</div>
+              </Card>
+            ) : (
+              log.timeline.map((item) => (
+                <div key={`${item.type}-${item.id || item.date}-${item.at}`} className="metric-row">
+                  <span>
+                    {item.date}
+                    <br />
+                    <small style={{ color: 'var(--ink-3)' }}>
+                      {item.type === 'checkin' ? `Overall ${item.overall ?? '?'}/10` : sessionLogDetail(item)}
+                    </small>
+                  </span>
+                  <strong>{item.type === 'checkin' ? 'Check-in' : 'Session'}</strong>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
+      <Foot>
+        <Primary onClick={() => go('settings')}>Back to settings</Primary>
       </Foot>
     </Screen>
   )

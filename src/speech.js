@@ -218,7 +218,9 @@ export function screenPrompt(screen, ctx = {}) {
       return `Staying at level ${levelBefore}. Try again tomorrow.`
     }
     case 'settings':
-      return 'Settings. Voice guide and theme. Back when done.'
+      return 'Settings. Voice guide and theme. Open recovery log for your clinician. Back when done.'
+    case 'clinician-log':
+      return 'Recovery log. Timeline of check-ins and sessions for your clinician. Not medical advice.'
     default:
       return ''
   }
@@ -250,6 +252,7 @@ export const VOICE_SCREENS = [
   'hour',
   'held',
   'settings',
+  'clinician-log',
 ]
 
 

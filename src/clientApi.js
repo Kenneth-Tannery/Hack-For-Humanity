@@ -419,3 +419,35 @@ export async function saveHour(profileId, sessionId, { hour, after }) {
     today: todayPayload(db, getProfile(db, profileId), session.localDate),
   }
 }
+
+export async function getClinicianLog(profileId, localDate) {
+  const db = loadDb()
+  const profile = requireProfile(db, profileId)
+  const checkins = listCheckins(db, profileId)
+  const sessions = listSessions(db, profileId)
+  const timeline = [
+    ...checkins.map((item) => ({ type: 'checkin', at: item.loggedAt, date: item.localDate, ...item })),
+    ...sessions.map((item) => ({ type: 'session', at: item.startedAt, date: item.localDate, ...item })),
+  ].sort((a, b) => (a.at < b.at ? 1 : -1))
+
+  return {
+    disclaimer:
+      'Not medical advice. This log is a prototype record of paced aerobic work and symptom ratings. It does not diagnose concussion or clear return to sport.',
+    profile: {
+      ...profile,
+      day: dayNumberOn(profile.injuryDate, localDate),
+      outlook: outlookFromAnswers(profile.answers),
+      zone: targetZone(profile.age, profile.level),
+      inMaintenance: (profile.progressionPhase ?? 'training') === 'maintenance',
+    },
+    summary: {
+      checkins: checkins.length,
+      sessions: sessions.length,
+      completedSessions: sessions.filter((s) => s.status === 'completed').length,
+      blockedFlags: sessions.filter((s) => s.status === 'blocked_flags').length,
+      blockedSymptoms: sessions.filter((s) => s.status === 'blocked_symptoms').length,
+      settledSessions: sessions.filter((s) => s.settled).length,
+    },
+    timeline,
+  }
+}

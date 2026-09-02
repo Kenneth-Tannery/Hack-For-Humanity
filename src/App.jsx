@@ -6,6 +6,7 @@ import {
   Active,
   After,
   Checkin,
+  ClinicianLog,
   ConnectBle,
   ConnectCamera,
   DisclaimerScreen,
@@ -84,6 +85,9 @@ export default function App() {
   const [level, setLevel] = useState(2)
   const [level5StableStreak, setLevel5StableStreak] = useState(0)
   const [inMaintenance, setInMaintenance] = useState(false)
+  const [clinicianLog, setClinicianLog] = useState(null)
+  const [logLoading, setLogLoading] = useState(false)
+  const [logError, setLogError] = useState(null)
   const [streak, setStreak] = useState(0)
   const [profileId, setProfileId] = useState(() => api.savedProfileId())
   const [sessionId, setSessionId] = useState(null)
@@ -156,6 +160,30 @@ export default function App() {
         }
         setSaveError(LOAD_TODAY)
         setTodayReady(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [screen, profileId])
+
+  useEffect(() => {
+    if (screen !== 'clinician-log' || !profileId) return undefined
+    let cancelled = false
+    setLogLoading(true)
+    setLogError(null)
+    setClinicianLog(null)
+    api
+      .getClinicianLog(profileId)
+      .then((data) => {
+        if (cancelled) return
+        setClinicianLog(data)
+        setLogLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.warn('Could not load clinician log', err)
+        setLogError('Could not load your log. Try again from Settings.')
+        setLogLoading(false)
       })
     return () => {
       cancelled = true
@@ -351,7 +379,7 @@ export default function App() {
       setLogged(true)
       setBefore(overall)
       applyToday(result.today)
-      const next = pendingSession ? 'red-flags' : 'home'
+      const next = pendingSession && !inMaintenance ? 'red-flags' : 'home'
       setPendingSession(false)
       go(next)
     } catch (err) {
@@ -572,9 +600,20 @@ export default function App() {
         injuryDate={injuryDate}
         onInjuryDateChange={persistInjuryDate}
         onResetSetup={resetSetup}
+        onOpenLog={profileId ? () => go('clinician-log') : undefined}
         voiceGuide={voiceGuide}
         setVoiceGuide={setVoiceGuide}
         settingsBack={settingsBack}
+      />
+    )
+  }
+  if (screen === 'clinician-log') {
+    view = (
+      <ClinicianLog
+        {...shared}
+        log={clinicianLog}
+        loading={logLoading}
+        error={logError}
       />
     )
   }
