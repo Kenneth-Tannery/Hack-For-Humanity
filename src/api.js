@@ -1,5 +1,5 @@
 import * as clientApi from './clientApi.js'
-import { localDate as todayLocalDate } from './data.js'
+import { advanceDemoDay, appLocalDate, resetDemoDay } from './data.js'
 
 const PROFILE_KEY = 'threshold-profile-id'
 
@@ -33,8 +33,10 @@ async function request(path, options = {}) {
 }
 
 export function localDate() {
-  return todayLocalDate()
+  return appLocalDate()
 }
+
+export { advanceDemoDay, resetDemoDay }
 
 export function savedProfileId() {
   return localStorage.getItem(PROFILE_KEY) || ''

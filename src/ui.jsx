@@ -6,6 +6,22 @@ export function Back({ onClick }) {
   )
 }
 
+export function ProgressTrack({ value, max, label }) {
+  const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0
+  return (
+    <div
+      className="progress-track"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      aria-label={label}
+    >
+      <span style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
 export function Status({ left, right, onBack }) {
   return (
     <div className="status">
@@ -68,9 +84,9 @@ export function Ghost({ children, onClick, ...rest }) {
   )
 }
 
-export function Danger({ children, onClick }) {
+export function Danger({ children, onClick, disabled }) {
   return (
-    <button type="button" className="btn btn-danger" onClick={onClick}>
+    <button type="button" className="btn btn-danger" onClick={onClick} disabled={disabled}>
       {children}
     </button>
   )
@@ -112,6 +128,14 @@ export function Foot({ children }) {
       {children}
       <Disclaimer />
     </div>
+  )
+}
+
+export function ToggleSwitch({ on, label }) {
+  return (
+    <span className="toggle-switch" aria-hidden={label ? undefined : true} aria-label={label}>
+      <span className="toggle-knob" />
+    </span>
   )
 }
 

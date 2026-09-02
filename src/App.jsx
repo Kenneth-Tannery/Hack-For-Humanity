@@ -72,6 +72,7 @@ export default function App() {
   const [before, setBefore] = useState(3)
   const [after, setAfter] = useState(6)
   const [hour, setHour] = useState(5)
+  const [heldEval, setHeldEval] = useState(null)
   const [source, setSource] = useState(null)
   const [cameraBpm, setCameraBpm] = useState(null)
   const [strap, setStrap] = useState('polar')
@@ -174,12 +175,13 @@ export default function App() {
     if (guideHere && (screenChanged || riskTurn || guideJustOn)) {
       const prompt = screenPrompt(screen, {
         day: dayNumber(injuryDate),
-        level,
+        level: heldEval?.nextLevel ?? heldEval?.levelAfter ?? level,
         overall,
         zone: targetZone(age, level),
         riskTitle: RISK_QUESTIONS[riskIndex]?.title,
         symptomName: SYMPTOMS[symptomIndex],
-        settled: hour - before <= 2 && after - before <= 2,
+        settled: heldEval?.settled ?? (hour - before <= 2 && after - before <= 2),
+        levelBefore: heldEval?.levelBefore ?? level,
         logged,
         pendingSession,
       })
@@ -203,12 +205,17 @@ export default function App() {
     before,
     after,
     hour,
+    heldEval,
     logged,
     pendingSession,
   ])
 
   function go(next) {
     if (next === 'home') setPendingSession(false)
+    if (next === 'after') {
+      setAfter(before)
+      setHour(before)
+    }
     if (next === 'settings') setSettingsBack(screen === 'settings' ? settingsBack : screen)
     if (next === 'risk' && screen === 'risk-consent') setRiskIndex(0)
     if (next === 'injury' && !profileId) setInjuryDate(localDate())
@@ -256,6 +263,7 @@ export default function App() {
       console.warn('Could not delete profile', err)
     }
     api.forgetProfileId()
+    api.resetDemoDay()
     setProfileId('')
     setSessionId(null)
     setLogged(false)
@@ -393,15 +401,61 @@ export default function App() {
     if (profileId && sessionId) {
       try {
         const result = await api.saveHour(profileId, sessionId, { hour, after })
-        const next = result?.evaluation?.nextLevel ?? result?.today?.level
-        if (next != null) setLevel(next)
+        if (result?.evaluation) {
+          setHeldEval(result.evaluation)
+          setLevel(result.evaluation.nextLevel)
+        } else if (result?.today?.level != null) {
+          setLevel(result.today.level)
+        }
       } catch (err) {
         console.warn('Could not save follow-up rating', err)
         setSaveError(SAVE_HOUR)
         return
       }
+    } else {
+      const rise = after - before
+      const hourDelta = hour - before
+      setHeldEval({
+        rise,
+        hourDelta,
+        settled: rise <= 2 && hourDelta <= 2,
+        levelBefore: level,
+        nextLevel: rise <= 2 && hourDelta <= 2 ? Math.min(5, level + 1) : level,
+        levelAfter: rise <= 2 && hourDelta <= 2 ? Math.min(5, level + 1) : level,
+      })
     }
     go('held')
+  }
+
+  async function finishHeld({ settled }) {
+    setSessionId(null)
+    setPendingSession(false)
+    setCameraBpm(null)
+    setSource(null)
+    setHeldEval(null)
+    if (settled) {
+      api.advanceDemoDay()
+      setLogged(false)
+      if (profileId) {
+        setTodayReady(false)
+        try {
+          const today = await api.getToday(profileId)
+          setSaveError(null)
+          setInjuryDate(today.injuryDate)
+          setAge(String(today.age))
+          setLevel(today.level)
+          setLogged(today.loggedToday)
+          setStreak(today.streak)
+          if (today.overall != null) setOverall(today.overall)
+        } catch (err) {
+          console.warn('Could not load tomorrow', err)
+          setSaveError(LOAD_TODAY)
+        } finally {
+          setTodayReady(true)
+        }
+      }
+    }
+    go('home')
   }
 
   const shared = { go, theme, setTheme }
@@ -554,11 +608,28 @@ export default function App() {
     view = <After {...shared} after={after} setAfter={setAfter} onSave={persistAfter} />
   }
   if (screen === 'hour') {
-    view = <HourLater {...shared} hour={hour} setHour={setHour} onSave={persistHour} />
+    view = (
+      <HourLater
+        {...shared}
+        hour={hour}
+        setHour={setHour}
+        onSave={persistHour}
+        before={before}
+        after={after}
+      />
+    )
   }
   if (screen === 'held') {
     view = (
-      <Held {...shared} before={before} after={after} hour={hour} level={level} setLevel={setLevel} />
+      <Held
+        {...shared}
+        before={before}
+        after={after}
+        hour={hour}
+        level={level}
+        evaluation={heldEval}
+        onFinish={finishHeld}
+      />
     )
   }
 
