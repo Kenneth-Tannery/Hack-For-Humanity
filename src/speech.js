@@ -297,7 +297,6 @@ export function overallPrompt() {
  * Keep short: easier to hear when symptomatic.
  */
 export function screenPrompt(screen, ctx = {}) {
-  const day = ctx.day != null ? `Day ${ctx.day}.` : ''
   const level = ctx.level != null ? `Level ${ctx.level}.` : ''
   const overall = ctx.overall != null ? `${ctx.overall} out of 10.` : ''
   const zone =
@@ -321,13 +320,13 @@ export function screenPrompt(screen, ctx = {}) {
     case 'home':
       if (ctx.inMaintenance) {
         return ctx.logged
-          ? `Maintenance mode. ${day} Symptoms logged. Log again anytime.`
-          : `Maintenance mode. ${day} Log symptoms today. No prescribed exercise.`
+          ? `Maintenance mode. Level ${ctx.level}. Symptoms logged. Log again anytime.`
+          : `Maintenance mode. Level ${ctx.level}. Log symptoms today. No prescribed exercise.`
       }
       if (ctx.logged) {
-        return `Today. ${day} ${level} Symptoms logged. Start session, or log again.`
+        return `Level ${ctx.level}. Symptoms logged. Start session, or log again.`
       }
-      return `Today. ${day} ${level} Log symptoms before you start a session.`
+      return `Level ${ctx.level}. Log symptoms before you start a session.`
     case 'checkin':
       return ctx.pendingSession
         ? 'Log symptoms first. A session needs today’s rating. Start with audio, or without.'
@@ -344,10 +343,14 @@ export function screenPrompt(screen, ctx = {}) {
       return `Not today. Symptoms ${overall} Above the safe level for exercise. Log symptoms instead, or go back.`
     case 'preflight':
       return `Before you start. Right now ${overall} ${zone} Start warmup when ready.`
-    case 'connect-ble':
-      return 'Connect a chest strap, or use the camera instead.'
     case 'connect-camera':
       return 'Lock your pulse. Remove your phone case if you have one. Cover camera and flash. When a number appears, hold still about three seconds, then hands free.'
+    case 'hr-retry':
+      return 'Could not lock your pulse. Try again with firm contact on the camera and flash, or continue with a pacing estimate.'
+    case 'hr-elevated':
+      return `Heart rate above target. Slow down. Target ${ctx.zone?.low ?? ''} to ${ctx.zone?.high ?? ''}.`
+    case 'hr-urgent':
+      return 'Stop now. Heart rate is too high above your target. End the session and rest.'
     case 'pulse-resync':
       return 'Quick pulse check. Remove your phone case if needed. Cover camera and flash briefly, then continue.'
     case 'warmup':
@@ -404,8 +407,10 @@ export const VOICE_SCREENS = [
   'emergency',
   'not-today',
   'preflight',
-  'connect-ble',
   'connect-camera',
+  'hr-retry',
+  'hr-elevated',
+  'hr-urgent',
   'pulse-resync',
   'warmup',
   'active',

@@ -5,6 +5,9 @@ import {
   formatTime,
   localDate,
   ACTIVE_SECONDS,
+  CAMERA_MIDCHECK_FRACTION,
+  HR_ELEVATED_TICKS,
+  HR_URGENT_ABOVE_HIGH,
   OVERALL_CHOICES,
   OVERALL_LABELS,
   RED_FLAGS,
@@ -16,7 +19,7 @@ import {
 import { canSpeak, cancelSpeak, overallPrompt, speak, symptomPrompt, unlockAudio } from './speech.js'
 import { downloadClinicianLogMd } from './clinicianLogExport.js'
 import { symptomClipId, warmVoiceClips } from './voiceClips.js'
-import { modelSessionBpm } from './sessionBpm.js'
+import { modelSessionBpm, sessionTargetMid } from './sessionBpm.js'
 import { useFingertipHr } from './useFingertipHr.jsx'
 import {
   Back,
@@ -934,15 +937,13 @@ export function Overall({
   )
 }
 
-export function Preflight({ go, injuryDate, age, overall, source, level }) {
+export function Preflight({ go, injuryDate, age, overall, source, level, cameraBpm }) {
   const zone = targetZone(age, level)
   const day = dayNumber(injuryDate)
   const sourceLabel =
-    source === 'polar' || source === 'garmin'
-      ? 'Chest strap · demo signal'
-      : source === 'camera'
-        ? 'Camera · pulse locked at start'
-        : 'Not connected'
+    source === 'camera'
+      ? 'Phone camera · pulse locked at start'
+      : 'Phone camera · lock pulse before warmup'
   return (
     <Screen>
       <Status left={<Clock />} right={`Day ${day} · Level ${level}`} onBack={() => go('red-flags')} />
@@ -956,8 +957,8 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
             <div className="card-value">{overall} / 10</div>
           </Card>
           <Card>
-            <div className="card-label">Heart rate source</div>
-            <div className="card-copy" style={{ color: source ? 'var(--in)' : 'var(--ink)' }}>
+            <div className="card-label">Heart rate</div>
+            <div className="card-copy" style={{ color: source === 'camera' ? 'var(--in)' : 'var(--ink)' }}>
               {sourceLabel}
             </div>
           </Card>
@@ -971,7 +972,7 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
               more than the number.
               {source === 'camera'
                 ? ' Camera stays off during exercise; pace is tracked from your pulse checks.'
-                : ''}
+                : ' You’ll lock your pulse with the camera before warmup.'}
             </div>
             <div className="card-cite">
               Concussion Alliance at-home stages; Amsterdam consensus 2023 return-to-sport HR steps.
@@ -980,7 +981,9 @@ export function Preflight({ go, injuryDate, age, overall, source, level }) {
         </div>
       </div>
       <Foot>
-        <Primary onClick={() => go(source ? 'warmup' : 'connect-ble')}>Start warmup</Primary>
+        <Primary onClick={() => go(source === 'camera' && cameraBpm != null ? 'warmup' : 'connect-camera')}>
+          {source === 'camera' && cameraBpm != null ? 'Start warmup' : 'Lock pulse · start warmup'}
+        </Primary>
       </Foot>
     </Screen>
   )
@@ -1064,6 +1067,7 @@ function ConnectCameraInner({
   mode = 'connect',
   goTarget,
   onRetry,
+  onLockFailed,
 }) {
   const target = goTarget ?? (mode === 'resync' ? 'active' : 'preflight')
   const isResync = mode === 'resync'
@@ -1088,6 +1092,15 @@ function ConnectCameraInner({
   useEffect(() => {
     if (timedOut) stop()
   }, [timedOut, stop])
+
+  useEffect(() => {
+    if (!timedOut || advanced.current || error) return undefined
+    const id = setTimeout(() => {
+      if (onLockFailed) onLockFailed()
+      else go('hr-retry')
+    }, 600)
+    return () => clearTimeout(id)
+  }, [timedOut, error, onLockFailed, go])
 
   useEffect(() => {
     if (advanced.current || error || timedOut || !lock.locked) return undefined
@@ -1120,9 +1133,9 @@ function ConnectCameraInner({
       ? 'Updating your pace — continuing to steady state.'
       : 'Continuing — camera off for the session so you can move hands-free.'
     : timedOut
-      ? 'Try again with firm contact on lens and flash, or use a chest strap.'
+      ? 'Try again with firm contact on lens and flash.'
       : noTorch
-        ? 'Use Android Chrome with the rear camera, or connect a chest strap instead.'
+        ? 'Use Android Chrome with the rear camera.'
         : lock.phase === 'measuring'
           ? 'Almost there — keep still a moment longer.'
           : readingHigh
@@ -1207,8 +1220,16 @@ function ConnectCameraInner({
       <Foot>
         {error || timedOut ? (
           <>
-            <Primary onClick={onRetry}>Try again</Primary>
-            <Ghost onClick={() => go('connect-ble')}>Use chest strap</Ghost>
+            <Primary
+              onClick={() => {
+                if (onLockFailed) onLockFailed()
+                else if (onRetry) onRetry()
+                else go('hr-retry')
+              }}
+            >
+              Try again
+            </Primary>
+            <Ghost onClick={() => go('preflight')}>Back</Ghost>
           </>
         ) : isResync ? (
           <>
@@ -1217,10 +1238,7 @@ function ConnectCameraInner({
           </>
         ) : (
           <>
-            <Ghost onClick={() => go('connect-ble')}>Back</Ghost>
-            {noTorch ? (
-              <Primary onClick={() => go('connect-ble')}>Connect strap</Primary>
-            ) : null}
+            <Ghost onClick={() => go('preflight')}>Back</Ghost>
           </>
         )}
       </Foot>
@@ -1242,6 +1260,105 @@ export function ConnectCamera(props) {
 
 export function PulseResync(props) {
   return <ConnectCamera {...props} mode="resync" goTarget="active" />
+}
+
+export function HrRetry({ go, mode = 'connect', onContinueWithoutLock }) {
+  const retryTarget = mode === 'resync' ? 'pulse-resync' : 'connect-camera'
+  return (
+    <Screen>
+      <Status left={<Clock />} right="Heart rate" onBack={() => go('preflight')} />
+      <div className="screen-body">
+        <Kicker tone="above">Pulse check</Kicker>
+        <Title wide>Couldn’t lock your pulse</Title>
+        <Lead>
+          Firm contact on the camera lens and flash usually fixes this. Remove thick phone cases so the
+          light sits flat on your finger.
+        </Lead>
+        <div className="stack">
+          <InfoCard label="Try again">
+            Cover the rear camera and flash. Hold still about three seconds after a number appears.
+          </InfoCard>
+          <InfoCard label="Or continue">
+            You can use a pacing estimate for this session. Symptom ratings still decide whether you
+            progress — heart rate is a guide only.
+          </InfoCard>
+        </div>
+      </div>
+      <Foot>
+        <Primary onClick={() => go(retryTarget)}>Try again</Primary>
+        <Ghost onClick={onContinueWithoutLock}>Continue without lock</Ghost>
+      </Foot>
+    </Screen>
+  )
+}
+
+export function HrElevated({ go, bpm, zone, level, onResume }) {
+  return (
+    <Screen>
+      <Status left={<Clock />} right={`Level ${level}`} />
+      <div className="screen-body">
+        <Kicker tone="above">Above target</Kicker>
+        <Title wide>Slow down a little</Title>
+        <Lead>
+          Your pace is above today’s target band. Ease off until you settle back in range.
+        </Lead>
+        <div className="stack">
+          <Card>
+            <div className="card-label">Reading now</div>
+            <div className="card-value">{bpm ?? '—'} bpm</div>
+            <div className="card-sub">
+              Target {zone?.low}–{zone?.high} bpm · Level {level}
+            </div>
+          </Card>
+          <InfoCard label="What to do" cite="Concussion Alliance at-home aerobic stages">
+            Walk or pedal more slowly. Stop if symptoms jump up — that matters more than the number.
+          </InfoCard>
+        </div>
+      </div>
+      <Foot>
+        <Primary
+          onClick={() => {
+            onResume?.()
+            go('active')
+          }}
+        >
+          I’m slowing down
+        </Primary>
+        <Ghost onClick={() => go('after')}>Stop session</Ghost>
+      </Foot>
+    </Screen>
+  )
+}
+
+export function HrUrgent({ go, bpm, zone, level }) {
+  return (
+    <Screen variant="emergency" alert>
+      <Status left={<Clock />} right={`Level ${level}`} />
+      <div className="screen-body">
+        <Kicker>Stop now</Kicker>
+        <Title wide>Heart rate too high</Title>
+        <Lead>
+          You’re well above today’s target. End this session and rest. Do not push through.
+        </Lead>
+        <div className="stack">
+          <Card>
+            <div className="card-label">Reading now</div>
+            <div className="card-value">{bpm ?? '—'} bpm</div>
+            <div className="card-sub">
+              Target {zone?.low}–{zone?.high} bpm · Level {level}
+            </div>
+          </Card>
+          <InfoCard label="Why stop" cite="Amsterdam consensus 2023 · symptom-limited exertion">
+            Paced recovery means staying under symptom and heart-rate limits. If symptoms worsen, seek
+            clinical care.
+          </InfoCard>
+        </div>
+      </div>
+      <Foot>
+        <Primary onClick={() => go('after')}>End session · rate symptoms</Primary>
+      </Foot>
+    </Screen>
+  )
 }
 
 function useSessionClock(active, startSeconds) {
@@ -1355,7 +1472,7 @@ export function Warmup({ go, source, cameraBpm, age, level }) {
         </div>
         <p className="session-sub-center">
           {lockedCamera
-            ? `Tracking from your camera lock (${lockedBpm} bpm). Hands free, like a strap.`
+            ? `Tracking from your camera lock (${lockedBpm} bpm). Hands free during exercise.`
             : 'Walk or pedal slowly. We’ll tell you when to settle into your target.'}
         </p>
         {!lockedCamera ? (
@@ -1373,7 +1490,7 @@ export function Warmup({ go, source, cameraBpm, age, level }) {
   )
 }
 
-export function Active({ go, age, level, source, cameraBpm }) {
+export function Active({ go, age, level, source, cameraBpm, onHrElevated, onHrUrgent, onMidcheck }) {
   const zone = targetZone(age, level)
   const [left] = useSessionClock(true, ACTIVE_SECONDS)
   const elapsed = ACTIVE_SECONDS - left
@@ -1384,7 +1501,7 @@ export function Active({ go, age, level, source, cameraBpm }) {
     phase: 'active',
     elapsedSec: elapsed,
     durationSec: ACTIVE_SECONDS,
-    mockBase: 133,
+    mockBase: sessionTargetMid(zone) ?? 120,
   })
   const announced = useThrottledValue(bpm)
   const status = zoneStatus(bpm, zone)
@@ -1393,12 +1510,43 @@ export function Active({ go, age, level, source, cameraBpm }) {
   const pct = ((bpm - min) / (max - min)) * 100
   const sourceLabel = lockedCamera
     ? `Tracked pace · target ${zone.low}–${zone.high} · from pulse checks`
-    : source === 'polar' || source === 'garmin'
-      ? 'Chest strap · demo signal'
-      : 'Pacing estimate'
+    : 'Pacing estimate · phone camera'
+  const midcheckDone = useRef(false)
+  const aboveTicks = useRef(0)
+  const hrAlertSent = useRef(false)
+
   useEffect(() => {
     if (left === 0) go('after')
   }, [left, go])
+
+  useEffect(() => {
+    if (source !== 'camera' || midcheckDone.current || !onMidcheck) return undefined
+    const midSec = ACTIVE_SECONDS * CAMERA_MIDCHECK_FRACTION
+    if (elapsed >= midSec) {
+      midcheckDone.current = true
+      onMidcheck()
+    }
+    return undefined
+  }, [elapsed, source, onMidcheck])
+
+  useEffect(() => {
+    if (hrAlertSent.current || left === 0) return undefined
+    if (bpm >= zone.high + HR_URGENT_ABOVE_HIGH) {
+      hrAlertSent.current = true
+      onHrUrgent?.(bpm, zone)
+      return undefined
+    }
+    if (bpm > zone.high) {
+      aboveTicks.current += 1
+      if (aboveTicks.current >= HR_ELEVATED_TICKS) {
+        hrAlertSent.current = true
+        onHrElevated?.(bpm, zone)
+      }
+    } else {
+      aboveTicks.current = 0
+    }
+    return undefined
+  }, [bpm, zone, left, onHrElevated, onHrUrgent])
   return (
     <Screen calm>
       <div className="session-top">

@@ -352,7 +352,7 @@ export async function startSession(profileId, { redFlags, before, hrSource, inte
     db.profiles[profileId] = profile
   }
   saveDb(db)
-  return { session: getSession(db, session.id), redirect: 'connect-ble' }
+  return { session: getSession(db, session.id), redirect: 'preflight' }
 }
 
 export async function setSessionSource(profileId, sessionId, hrSource) {

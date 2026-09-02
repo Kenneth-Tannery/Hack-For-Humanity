@@ -7,7 +7,6 @@ import {
   After,
   Checkin,
   ClinicianLog,
-  ConnectBle,
   ConnectCamera,
   DisclaimerScreen,
   Emergency,
@@ -15,6 +14,9 @@ import {
   Held,
   Home,
   HourLater,
+  HrElevated,
+  HrRetry,
+  HrUrgent,
   Injury,
   NotToday,
   Outlook,
@@ -84,7 +86,8 @@ export default function App() {
   const [heldEval, setHeldEval] = useState(null)
   const [source, setSource] = useState(null)
   const [cameraBpm, setCameraBpm] = useState(null)
-  const [strap, setStrap] = useState('polar')
+  const [hrRetryMode, setHrRetryMode] = useState('connect')
+  const [hrAlert, setHrAlert] = useState(null)
   const [level, setLevel] = useState(2)
   const [level5StableStreak, setLevel5StableStreak] = useState(0)
   const [inMaintenance, setInMaintenance] = useState(false)
@@ -118,9 +121,10 @@ export default function App() {
   }
 
   function voiceCtx(overrides = {}) {
+    const lv = heldEval?.nextLevel ?? heldEval?.levelAfter ?? level
     return {
-      day: dayNumber(injuryDate),
-      level: heldEval?.nextLevel ?? heldEval?.levelAfter ?? level,
+      level: lv,
+      levelLabel: `Level ${lv}.`,
       overall,
       zone: targetZone(age, level),
       riskTitle: RISK_QUESTIONS[riskIndex]?.title,
@@ -409,6 +413,31 @@ export default function App() {
     if (intent === 'emergency' || redFlags.length) return 'emergency'
     if (overall >= 8) return 'not-today'
     return 'preflight'
+  }
+
+  function onCameraLockFailed(mode = 'connect') {
+    setHrRetryMode(mode)
+    go('hr-retry')
+  }
+
+  function continueWithoutPulseLock() {
+    setCameraBpm(null)
+    persistSource('camera')
+    go('warmup')
+  }
+
+  function openHrElevated(bpm, zone) {
+    setHrAlert({ bpm, zone })
+    go('hr-elevated')
+  }
+
+  function openHrUrgent(bpm, zone) {
+    setHrAlert({ bpm, zone })
+    go('hr-urgent')
+  }
+
+  function resumeActiveAfterHr() {
+    setHrAlert(null)
   }
 
   function persistCameraLock(bpm) {
@@ -735,27 +764,58 @@ export default function App() {
         overall={overall}
         source={source}
         level={level}
-      />
-    )
-  }
-  if (screen === 'connect-ble') {
-    view = (
-      <ConnectBle
-        {...shared}
-        setSource={persistSource}
-        selected={strap}
-        setSelected={setStrap}
+        cameraBpm={cameraBpm}
       />
     )
   }
   if (screen === 'connect-camera') {
     view = (
-      <ConnectCamera {...shared} setSource={persistSource} onCameraLocked={persistCameraLock} />
+      <ConnectCamera
+        {...shared}
+        setSource={persistSource}
+        onCameraLocked={persistCameraLock}
+        onLockFailed={() => onCameraLockFailed('connect')}
+      />
     )
   }
   if (screen === 'pulse-resync') {
     view = (
-      <PulseResync {...shared} setSource={persistSource} onCameraLocked={persistCameraLock} />
+      <PulseResync
+        {...shared}
+        setSource={persistSource}
+        onCameraLocked={persistCameraLock}
+        onLockFailed={() => onCameraLockFailed('resync')}
+      />
+    )
+  }
+  if (screen === 'hr-retry') {
+    view = (
+      <HrRetry
+        {...shared}
+        mode={hrRetryMode}
+        onContinueWithoutLock={continueWithoutPulseLock}
+      />
+    )
+  }
+  if (screen === 'hr-elevated') {
+    view = (
+      <HrElevated
+        {...shared}
+        bpm={hrAlert?.bpm}
+        zone={hrAlert?.zone ?? targetZone(age, level)}
+        level={level}
+        onResume={resumeActiveAfterHr}
+      />
+    )
+  }
+  if (screen === 'hr-urgent') {
+    view = (
+      <HrUrgent
+        {...shared}
+        bpm={hrAlert?.bpm}
+        zone={hrAlert?.zone ?? targetZone(age, level)}
+        level={level}
+      />
     )
   }
   if (screen === 'warmup') {
@@ -764,7 +824,18 @@ export default function App() {
     )
   }
   if (screen === 'active') {
-    view = <Active {...shared} age={age} level={level} source={source} cameraBpm={cameraBpm} />
+    view = (
+      <Active
+        {...shared}
+        age={age}
+        level={level}
+        source={source}
+        cameraBpm={cameraBpm}
+        onHrElevated={openHrElevated}
+        onHrUrgent={openHrUrgent}
+        onMidcheck={() => go('pulse-resync')}
+      />
+    )
   }
   if (screen === 'glance') {
     view = (

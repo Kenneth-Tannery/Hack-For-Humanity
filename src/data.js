@@ -112,6 +112,12 @@ export const ACTIVE_SECONDS = SESSION_MINUTES * 60 - WARMUP_SECONDS
 /** Camera mid-session pulse check at this fraction of main exercise elapsed. */
 export const CAMERA_MIDCHECK_FRACTION = 0.5
 
+/** Sustained time above target before “slow down” alert (~5 s at 900 ms ticks). */
+export const HR_ELEVATED_TICKS = 6
+
+/** BPM above zone high → stop-now alert (reachable with modeled camera wobble). */
+export const HR_URGENT_ABOVE_HIGH = 3
+
 export function dayNumber(injuryDate) {
   const start = new Date(`${injuryDate}T00:00:00`)
   if (Number.isNaN(start.getTime())) return 1

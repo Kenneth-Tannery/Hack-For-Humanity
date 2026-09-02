@@ -25,8 +25,8 @@ export function symptomClipId(name) {
 export function screenClipId(screen, ctx = {}) {
   switch (screen) {
     case 'home':
-      if (ctx.inMaintenance) return ctx.logged ? 'home-maintenance-logged' : 'home-maintenance'
-      return ctx.logged ? 'home-logged' : 'home-not-logged'
+      // Level changes — use TTS so spoken level matches the patient.
+      return null
     case 'checkin':
       return ctx.pendingSession ? 'checkin-pending' : 'checkin'
     case 'symptom':
@@ -37,13 +37,7 @@ export function screenClipId(screen, ctx = {}) {
       return ctx.riskTitle ? riskIdFromTitle(ctx.riskTitle) : 'risk-consent'
     case 'held':
       if (ctx.graduated) return 'held-graduated'
-      if (ctx.settled && Number(ctx.levelBefore ?? ctx.level) >= 5) {
-        const streak = ctx.level5StableStreak ?? 0
-        if (streak >= 2) return 'held-level-5-streak'
-        return 'held-level-5'
-      }
-      if (ctx.settled && Number(ctx.levelBefore ?? ctx.level) < 5) return 'held-level-up'
-      return 'held-stay'
+      return null
     default:
       return screen
   }
